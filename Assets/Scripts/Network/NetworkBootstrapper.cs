@@ -3,6 +3,9 @@ using Unity.Netcode;
 
 public class NetworkBootstrapper : MonoBehaviour
 {
+    [Header("UI 연결")]
+    public GameObject startMenuUI;
+
     void Start()
     {
 #if UNITY_SERVER
@@ -25,5 +28,10 @@ public class NetworkBootstrapper : MonoBehaviour
     {
         Debug.Log("[Client] 서버에 접속을 시도합니다...");
         NetworkManager.Singleton.StartClient();
+
+        if (startMenuUI != null)
+        {
+            startMenuUI.SetActive(false);
+        }
     }
 }
