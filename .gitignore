@@ -1,0 +1,27 @@
+# Unity generated
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+UserSettings/
+MemoryCaptures/
+
+# Rider/VSCode/VS
+.vs/
+.idea/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+
+# Local reference clones (not part of this project)
+ref/
+
+# OS
+.DS_Store
+Thumbs.db
