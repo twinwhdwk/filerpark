@@ -52,13 +52,13 @@ public class PlayerMovementNGO : NetworkBehaviour
         isGrounded = groundCheck != null
             && Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
 
-        rb.velocity = new Vector2(horizontalInput.Value * moveSpeed, rb.velocity.y);
+        rb.linearVelocity = new Vector2(horizontalInput.Value * moveSpeed, rb.linearVelocity.y);
     }
 
     [ServerRpc]
     private void RequestJumpServerRpc()
     {
         if (!isGrounded) return;
-        rb.velocity = new Vector2(rb.velocity.x, jumpForce);
+        rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
     }
 }
