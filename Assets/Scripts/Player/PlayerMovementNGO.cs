@@ -15,6 +15,7 @@ public class PlayerMovementNGO : NetworkBehaviour
 
     private Rigidbody2D rb;
     private bool isGrounded;
+    private BotController bot;
 
     // 소유 클라이언트만 값을 쓰고, 서버가 FixedUpdate에서 읽어 실제 이동을 계산한다.
     private readonly NetworkVariable<float> horizontalInput = new NetworkVariable<float>(
@@ -26,6 +27,7 @@ public class PlayerMovementNGO : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         rb = GetComponent<Rigidbody2D>();
+        bot = GetComponent<BotController>();
 
         // 물리 연산은 서버가 전담한다 -- 서버가 아닌 클라이언트에서는 Rigidbody2D를
         // Kinematic으로 바꿔 로컬 중력/충돌 계산을 끄고, NetworkTransform이 서버가
@@ -36,6 +38,18 @@ public class PlayerMovementNGO : NetworkBehaviour
     private void Update()
     {
         if (!IsOwner) return;
+
+        // 봇 클라이언트(-bot 인자로 실행됨)는 키보드 대신 BotController가 만든
+        // 입력을 그대로 사용한다 -- 이후 경로(NetworkVariable/ServerRpc)는 사람과 동일하다.
+        if (bot != null && bot.enabled)
+        {
+            horizontalInput.Value = bot.HorizontalInput;
+            if (bot.JumpRequested)
+            {
+                RequestJumpServerRpc();
+            }
+            return;
+        }
 
         horizontalInput.Value = Input.GetAxisRaw("Horizontal");
 

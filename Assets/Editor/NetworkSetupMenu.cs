@@ -16,6 +16,7 @@ public static class NetworkSetupMenu
 {
     private const string ServerAddress = "34.50.24.161";
     private const ushort ServerPort = 7777;
+    private const string BotExePathKey = "Filerpark.BotClientExePath";
 
     // NGO 2.x의 NetworkManager Inspector에는 (1.x와 달리) Play 모드에서 자동으로
     // 뜨는 Start Host/Server/Client 버튼이 없다. 그 존재 여부를 더 알아보는 대신,
@@ -109,6 +110,7 @@ public static class NetworkSetupMenu
         PlayerMovementNGO movement = go.AddComponent<PlayerMovementNGO>();
         go.AddComponent<PlayerSetupNGO>();
         go.AddComponent<PlayerColorNGO>();
+        go.AddComponent<BotController>();
 
         GameObject groundCheck = new GameObject("groundCheck");
         groundCheck.transform.SetParent(go.transform);
@@ -293,6 +295,85 @@ public static class NetworkSetupMenu
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
 
         Debug.Log("ConnectCanvas 생성 완료 -- 버튼 클릭 시 NetworkBootstrapper.ConnectToServer() 호출되도록 연결됨. Ctrl+S로 저장하세요.");
+    }
+
+    // 사람 파트너 없이 협동 기믹을 반복 테스트하기 위한 봇 클라이언트 실행기.
+    // 실제로는 빌드된 클라이언트 실행 파일을 -bot 인자로 여러 개 띄우는 것 --
+    // BotProcess/BotController가 각 프로세스 안에서 자동 접속 + 자동 조작을 담당한다.
+    // 순서: Client 빌드 1회 -> 경로 지정 -> Editor Play 모드에서 Start Host -> 봇 실행.
+    [MenuItem("Tools/Coop Setup/Bot Simulation/Set Bot Client Build Path...")]
+    public static void SetBotClientPath()
+    {
+        string current = EditorPrefs.GetString(BotExePathKey, "");
+        string startDir = !string.IsNullOrEmpty(current) ? Path.GetDirectoryName(current) : Application.dataPath;
+        string path = EditorUtility.OpenFilePanel("봇으로 쓸 클라이언트 빌드(.exe) 선택", startDir, "exe");
+        if (string.IsNullOrEmpty(path)) return;
+
+        EditorPrefs.SetString(BotExePathKey, path);
+        Debug.Log($"봇 클라이언트 경로 설정 완료: {path}");
+    }
+
+    [MenuItem("Tools/Coop Setup/Bot Simulation/Launch 1 Bot Client")]
+    public static void LaunchOneBot() => LaunchBots(1);
+
+    [MenuItem("Tools/Coop Setup/Bot Simulation/Launch 2 Bot Clients")]
+    public static void LaunchTwoBots() => LaunchBots(2);
+
+    [MenuItem("Tools/Coop Setup/Bot Simulation/Launch 3 Bot Clients")]
+    public static void LaunchThreeBots() => LaunchBots(3);
+
+    [MenuItem("Tools/Coop Setup/Bot Simulation/Stop All Bot Clients")]
+    public static void StopAllBots()
+    {
+        string exePath = EditorPrefs.GetString(BotExePathKey, "");
+        if (string.IsNullOrEmpty(exePath))
+        {
+            Debug.LogWarning("봇 클라이언트 경로가 지정되어 있지 않아 무엇을 종료할지 알 수 없습니다.");
+            return;
+        }
+
+        string processName = Path.GetFileNameWithoutExtension(exePath);
+        System.Diagnostics.Process[] processes = System.Diagnostics.Process.GetProcessesByName(processName);
+        int killed = 0;
+        foreach (System.Diagnostics.Process p in processes)
+        {
+            try
+            {
+                p.Kill();
+                killed++;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"프로세스 종료 실패 (PID {p.Id}): {e.Message}");
+            }
+        }
+
+        Debug.Log($"봇 클라이언트 {killed}개를 종료했습니다. (같은 이름의 다른 실행 중인 창도 함께 종료됨에 유의)");
+    }
+
+    private static void LaunchBots(int count)
+    {
+        string exePath = EditorPrefs.GetString(BotExePathKey, "");
+        if (string.IsNullOrEmpty(exePath) || !File.Exists(exePath))
+        {
+            Debug.LogError("봇 클라이언트 빌드 경로가 설정되지 않았습니다. 먼저 'Bot Simulation/Set Bot Client Build Path...'로 지정하세요 " +
+                "(File > Build Settings > Windows, Mac, Linux 로 일반 클라이언트를 한 번 빌드해두어야 합니다).");
+            return;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            var startInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = exePath,
+                Arguments = "-bot -serverip 127.0.0.1 -serverport 7777",
+                UseShellExecute = true,
+            };
+            System.Diagnostics.Process.Start(startInfo);
+        }
+
+        Debug.Log($"봇 클라이언트 {count}개를 실행했습니다 (127.0.0.1:7777로 접속 시도). " +
+            "Editor에서 Play 모드로 들어가 'Debug: Start Host'를 먼저 눌러야 접속에 성공합니다.");
     }
 
     private static Sprite GetOrCreatePlaceholderSprite()
