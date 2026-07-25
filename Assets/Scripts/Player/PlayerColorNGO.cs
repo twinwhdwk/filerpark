@@ -17,6 +17,10 @@ public class PlayerColorNGO : NetworkBehaviour
         new Color(0.95f, 0.60f, 0.20f), // orange
     };
 
+    // 스코어보드 등, 플레이어 스폰 전에도(접속 순서만으로) 같은 색을 미리 보여줘야 하는
+    // UI가 재사용하는 공개 접근자 -- 팔레트를 여기 한 곳에서만 관리한다.
+    public static Color GetColor(int index) => PlayerColors[((index % PlayerColors.Length) + PlayerColors.Length) % PlayerColors.Length];
+
     private readonly NetworkVariable<Color> playerColor = new NetworkVariable<Color>(
         Color.white,
         NetworkVariableReadPermission.Everyone,

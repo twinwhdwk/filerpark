@@ -362,13 +362,15 @@ public static class NetworkSetupMenu
         Debug.Log("ConnectCanvas 생성/갱신 완료 -- UI Style Guide 색/폰트 적용, 버튼 클릭 시 NetworkBootstrapper.ConnectToServer() 호출.");
     }
 
-    private static GameObject FindChild(Transform parent, string name)
+    // internal: GameFlowSceneSetup.cs (같은 어셈블리, Assets/Editor/ 아래 asmdef 없음)도
+    // 재사용한다 -- Bootstrap/Lobby/Stage 씬 UI를 만들 때 이 헬퍼들을 중복 구현하지 않기 위함.
+    internal static GameObject FindChild(Transform parent, string name)
     {
         Transform child = parent.Find(name);
         return child != null ? child.gameObject : null;
     }
 
-    private static T GetOrAddComponent<T>(GameObject go) where T : Component
+    internal static T GetOrAddComponent<T>(GameObject go) where T : Component
     {
         T component = go.GetComponent<T>();
         return component != null ? component : go.AddComponent<T>();
@@ -738,7 +740,7 @@ public static class NetworkSetupMenu
             "실제 스테이지 게임플레이 로딩은 아직 미구현(Docs/Stages 설계 문서 단계)이라 '시작' 버튼은 로그만 남깁니다.");
     }
 
-    private static Text CreateOrGetLabel(Transform parent, string name, Vector2 anchoredPosition, Vector2 size,
+    internal static Text CreateOrGetLabel(Transform parent, string name, Vector2 anchoredPosition, Vector2 size,
         string fontPath, int fontSize, Color color, TextAnchor alignment)
     {
         GameObject obj = FindChild(parent, name);
@@ -845,7 +847,8 @@ public static class NetworkSetupMenu
     // 거리함수 -- Inigo Quilez의 공식). 9-slice로 늘어나도 모서리가 안 뭉개지도록
     // spriteBorder를 radius+border만큼 잡아준다. UI Style Guide의 "배지/스티커"
     // 버튼 모양(라운드 6px급, 굵은 테두리)을 표현하는 용도.
-    private static Sprite GetOrCreateRoundedRectSprite(string path, Color fillColor, Color borderColor)
+    internal static Sprite GetOrCreateRoundedRectSprite(string path, Color fillColor, Color borderColor,
+        float radius = 28f, float borderThickness = 10f)
     {
         Sprite existing = AssetDatabase.LoadAssetAtPath<Sprite>(path);
         if (existing != null)
@@ -856,8 +859,6 @@ public static class NetworkSetupMenu
         EnsureFolder(Path.GetDirectoryName(path).Replace("\\", "/"));
 
         const int size = 128;
-        const float radius = 28f;
-        const float borderThickness = 10f;
 
         Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
         Color[] pixels = new Color[size * size];
@@ -915,7 +916,7 @@ public static class NetworkSetupMenu
     // PlayerColorNGO의 색 곱연산(tint)이 그대로 먹히게 하고, 외곽선/눈은 거의 검정으로
     // 그려서 어떤 플레이어 색이 곱해져도(검정*무엇이든=검정에 가까움) 항상 또렷하게
     // 남도록 한다.
-    private static Sprite GetOrCreatePlayerCharacterSprite()
+    internal static Sprite GetOrCreatePlayerCharacterSprite()
     {
         const string path = "Assets/Sprites/PlayerCharacter.png";
 
@@ -1005,7 +1006,7 @@ public static class NetworkSetupMenu
         return AssetDatabase.LoadAssetAtPath<Sprite>(path);
     }
 
-    private static Sprite GetOrCreatePlaceholderSprite()
+    internal static Sprite GetOrCreatePlaceholderSprite()
     {
         const string folder = "Assets/Sprites";
         const string path = folder + "/PlayerPlaceholder.png";
@@ -1046,7 +1047,7 @@ public static class NetworkSetupMenu
         return AssetDatabase.LoadAssetAtPath<Sprite>(path);
     }
 
-    private static void EnsureFolder(string path)
+    internal static void EnsureFolder(string path)
     {
         if (AssetDatabase.IsValidFolder(path))
         {
