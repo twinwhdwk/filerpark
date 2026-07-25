@@ -17,6 +17,12 @@ public class ScoreboardUI : MonoBehaviour
     // 로비에서도 "이 색 = 이 사람"이 스폰 전부터 일관되게 보이도록.
     private static readonly Dictionary<ulong, int> ColorSlotByClientId = new Dictionary<ulong, int>();
 
+    // 데이터가 실제로 바뀌었을 때만 다시 그린다 -- 예전엔 Update()마다(초당 60번)
+    // StringBuilder + rich text를 새로 만들어 Text.text에 대입했는데, 스코어는
+    // ClientRpc가 올 때만 바뀌므로 대부분의 프레임은 완전히 낭비되는 작업이었다
+    // (Text.text 대입은 Canvas 리빌드를 유발해서 특히 더 비싸다).
+    private static bool dirty = true;
+
     public static void UpdateScoreboard(ulong[] clientIds, int[] values)
     {
         LatestScores.Clear();
@@ -28,6 +34,7 @@ public class ScoreboardUI : MonoBehaviour
                 ColorSlotByClientId[clientIds[i]] = ColorSlotByClientId.Count;
             }
         }
+        dirty = true;
     }
 
     private void OnEnable()
@@ -36,11 +43,14 @@ public class ScoreboardUI : MonoBehaviour
         {
             headerText.text = "SCOREBOARD";
         }
+        // 씬이 막 로드되어 이 오브젝트가 처음 활성화되는 경우에도 한 번은 그려야 하므로.
+        dirty = true;
     }
 
     private void Update()
     {
-        if (scoreText == null) return;
+        if (scoreText == null || !dirty) return;
+        dirty = false;
 
         if (LatestScores.Count == 0)
         {

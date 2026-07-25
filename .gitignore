@@ -14,6 +14,10 @@ ServerBuild/
 build_*.log
 build_*.pid
 
+# Headless Editor/bot-simulation run logs (scratch output from -logFile, not build artifacts)
+bot*.log
+headless_*.log
+
 # Rider/VSCode/VS
 .vs/
 .idea/

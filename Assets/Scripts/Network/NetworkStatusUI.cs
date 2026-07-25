@@ -1,14 +1,18 @@
 using UnityEngine;
+using UnityEngine.UI;
 using Unity.Netcode;
-using TMPro;
 
-// Canvas 아래 상태 텍스트(TextMeshProUGUI)에 부착할 필요 없이, 이 스크립트가 붙은
-// 오브젝트의 Inspector에 그 Text를 드래그해서 연결한다. 서버/클라이언트 접속 이벤트를
-// 구독해서 현재 접속 인원을 화면에 표시하는 순수 UI 스크립트 -- 게임 로직에는 관여하지 않는다.
+// 이 스크립트가 붙은 오브젝트의 Inspector에 Text를 드래그해서 연결한다. 서버/클라이언트
+// 접속 이벤트를 구독해서 현재 접속 인원을 화면에 표시하는 순수 UI 스크립트 -- 게임
+// 로직에는 관여하지 않는다.
+// 레거시 UI.Text를 쓴다 (TMP_Text가 아님) -- 이 프로젝트는 TMP Essentials를 임포트한
+// 적이 없어서 TMP_Text로 렌더링하면 폰트 없이 빈 텍스트로 나온다 (StageClearUI.cs와
+// 동일한 이유, CLAUDE.md 참고). 이 컴포넌트는 현재 어떤 씬에도 연결돼 있지 않지만,
+// 나중에 실제로 쓰기 시작할 때 이 버그를 다시 밟지 않도록 미리 고쳐둔다.
 public class NetworkStatusUI : MonoBehaviour
 {
     [Header("UI 연결")]
-    public TMP_Text statusText;
+    public Text statusText;
 
     private void OnEnable()
     {
