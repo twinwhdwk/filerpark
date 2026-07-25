@@ -14,4 +14,13 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Stages/Stage01_Gatekeeper.unity
     guid: 82b6d6f640a683d4a8054c76b97b20b9
+  - enabled: 1
+    path: Assets/Scenes/Stages/Stage02_BlockCarry.unity
+    guid: 649e6edd5a3b5104b8c9f24e6fd19a3e
+  - enabled: 1
+    path: Assets/Scenes/Stages/Stage03_KeyRelay.unity
+    guid: b165b7e13e1239647a265ea13b9e66b0
+  - enabled: 1
+    path: Assets/Scenes/Stages/Stage04_EscapeCountdown.unity
+    guid: 24967af992568d5468c635402e9d3840
   m_configObjects: {}

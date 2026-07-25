@@ -24,6 +24,9 @@ public static class GameFlowSceneSetup
     private const string BootstrapScenePath = ScenesFolder + "/Bootstrap.unity";
     private const string LobbyScenePath = ScenesFolder + "/Lobby.unity";
     private const string Stage01ScenePath = StagesFolder + "/Stage01_Gatekeeper.unity";
+    private const string Stage02ScenePath = StagesFolder + "/Stage02_BlockCarry.unity";
+    private const string Stage03ScenePath = StagesFolder + "/Stage03_KeyRelay.unity";
+    private const string Stage04ScenePath = StagesFolder + "/Stage04_EscapeCountdown.unity";
 
     private const string ServerAddress = "34.50.24.161";
     private const ushort ServerPort = 7777;
@@ -37,8 +40,11 @@ public static class GameFlowSceneSetup
         CreateBootstrapScene();
         CreateLobbyScene();
         CreateStage01Scene();
+        CreateStage02Scene();
+        CreateStage03Scene();
+        CreateStage04Scene();
         ConfigureBuildSettingsScenes();
-        Debug.Log("[FlowSetup] Bootstrap/Lobby/Stage01 씬 생성 + Build Settings 구성 전체 완료.");
+        Debug.Log("[FlowSetup] Bootstrap/Lobby/Stage01-04 씬 생성 + Build Settings 구성 전체 완료.");
     }
 
     [MenuItem("Tools/Coop Setup/Multiplayer Flow/1. Create Bootstrap Scene")]
@@ -83,7 +89,13 @@ public static class GameFlowSceneSetup
         GameObject flowObj = new GameObject("GameFlowManager");
         flowObj.AddComponent<NetworkObject>();
         GameFlowManager flow = flowObj.AddComponent<GameFlowManager>();
-        flow.stageSceneNames = new[] { "Stage01_Gatekeeper" };
+        flow.stageSceneNames = new[]
+        {
+            "Stage01_Gatekeeper",
+            "Stage02_BlockCarry",
+            "Stage03_KeyRelay",
+            "Stage04_EscapeCountdown",
+        };
         flow.lobbySceneName = "Lobby";
         flow.minPlayersToStart = 1;
         flow.lobbyCountdownSeconds = 5f;
@@ -270,18 +282,23 @@ public static class GameFlowSceneSetup
         UnityEditor.Events.UnityEventTools.AddPersistentListener(buttonScript.OnButtonPress, doorScript.AddPress);
         UnityEditor.Events.UnityEventTools.AddPersistentListener(buttonScript.OnButtonRelease, doorScript.RemovePress);
 
-        // 골 존: 6개 스폰 지점(-6..6)을 전부 덮는 폭으로 크게 잡는다 -- 봇이 4~6개일 때
-        // Patrol 위상이 서로 어긋나 "동시에 한곳에 모이기"가 오래 걸리거나 안 맞을 수
-        // 있으므로, 스폰 직후 낙하 위치만으로 이미 전원이 안에 들어오도록 보장한다.
+        // 골 존: 6개 스폰 지점(-6..6)뿐 아니라 BotController의 기본 Patrol 왕복
+        // 범위(spawn ± patrolHalfWidth=3, 즉 -9..9)까지 전부 덮는 폭으로 잡는다.
+        // 처음엔 스폰 범위(16.5)만 덮었는데, 그러면 스폰 직후 짧은 순간에는 전원이
+        // 우연히 안에 있어 클리어되지만, 그 순간을 놓치고 봇들이 Patrol로 흩어지기
+        // 시작하면 x=6 스폰 봇은 x=9까지 나가 존 밖으로 벗어나 버려 "전원 동시 도달"
+        // 조건이 다시는 우연히 맞지 않는 경우를 실측했다(5봇 테스트, inZone이 4에서
+        // 못 넘고 계속 떨어짐). Patrol 전체 왕복 범위를 덮어야 언제 체크하든 항상
+        // 성립한다.
         GameObject goalZone = new GameObject("GoalZone1");
         goalZone.transform.position = new Vector3(0f, -2.2f, 0f);
         goalZone.AddComponent<SpriteRenderer>();
-        ApplySlicedSprite(goalZone, tintableSprite, new Vector2(16.5f, 1.6f));
+        ApplySlicedSprite(goalZone, tintableSprite, new Vector2(19f, 1.6f));
         goalZone.GetComponent<SpriteRenderer>().color = new Color(
             UITheme.ColorBgSecondary.r, UITheme.ColorBgSecondary.g, UITheme.ColorBgSecondary.b, 0.5f);
         BoxCollider2D goalCollider = goalZone.AddComponent<BoxCollider2D>();
         goalCollider.isTrigger = true;
-        goalCollider.size = new Vector2(16.5f, 1.6f);
+        goalCollider.size = new Vector2(19f, 1.6f);
         goalZone.AddComponent<NetworkObject>();
         GoalZoneNGO goalScript = goalZone.AddComponent<GoalZoneNGO>();
 
@@ -335,6 +352,260 @@ public static class GameFlowSceneSetup
         clearUI.clearText = clearText;
     }
 
+    [MenuItem("Tools/Coop Setup/Multiplayer Flow/5. Create Stage02 Scene (Block Carry)")]
+    public static void CreateStage02Scene()
+    {
+        NetworkSetupMenu.EnsureFolder(StagesFolder);
+        LoadThemeFonts();
+
+        Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+        CreateOrthoCamera(true);
+
+        Color dirtColor = new Color(0.45f, 0.32f, 0.2f);
+        Color grassColor = new Color(0.55f, 0.78f, 0.35f);
+        // 스폰 지점(-6~6)과 블록 초기 위치 사이에 확실한 여유를 둔다 -- 처음엔 블록을
+        // x=4(폭 5, 1.5~6.5)에 뒀다가 스폰 지점 3.6/6이 블록 몸통 안쪽에 겹쳐 봇이
+        // 스폰과 동시에 블록에 박히는 문제를 실제로 겪었다.
+        CreateGroundWithGrassCap(new Vector3(6.5f, -3f, 0f), new Vector3(31f, 1f, 1f), dirtColor, grassColor);
+        CreateGroundWithGrassCap(new Vector3(31f, -3f, 0f), new Vector3(8f, 1f, 1f), dirtColor, grassColor);
+        // 구덩이(22~27) 아래 안전망 -- 5봇 테스트에서 봇이 다리(블록)를 건너다가
+        // 서로 부대껴 살짝 밀려나 구덩이로 떨어지는 경우를 실측했다. 안전망이 없으면
+        // 바닥 없이 Y좌표가 -수십만까지 무한히 떨어져(실측: -294802) 그 봇은 영원히
+        // 게임에 복귀하지 못한다. Stage03의 시소 밑 안전망과 동일한 처리.
+        CreateGroundWithGrassCap(new Vector3(24.5f, -8f, 0f), new Vector3(8f, 1f, 1f), dirtColor, UITheme.ColorBgSecondary);
+
+        CreateSpawnPoints();
+
+        Sprite badgeSprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite(
+            "Assets/Sprites/UI_ButtonPrimary.png", UITheme.ColorPrimary, UITheme.ColorWhite);
+        Sprite tintableSprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite(
+            "Assets/Sprites/UI_RoundedWhite.png", Color.white, Color.white);
+
+        GameObject targetMarker = new GameObject("BlockTarget");
+        // 블록 y=-3.0: 바닥 표면(GroundLeft top = -3+0.5 = -2.5)과 블록 윗면(중심
+        // -3.0 + 높이 절반 0.5 = -2.5)이 정확히 일치해야 한다. 처음엔 -2.2로 뒀는데
+        // 그러면 블록 윗면이 바닥보다 0.8만큼 높아 봇이 다리를 건너다가 이 턱에
+        // 막혀 멈춰 섰다(랜덤 타이머로만 점프하는 BotController는 이 턱을 못 넘음).
+        targetMarker.transform.position = new Vector3(24.5f, -3.0f, 0f);
+
+        // 돌덩이: 구덩이(x=22~27) 왼쪽에서 시작해, 밀려서 구덩이 중앙까지 가면 다리가
+        // 되어 반대편으로 건널 수 있게 한다. "높은 벽을 스택으로 넘는다"는 설계
+        // 문서(02-block-carry.md) 원안 대신 "구덩이를 다리로 잇는다"로 단순화했다 --
+        // 봇 점프는 랜덤 타이머라 정밀 스택 타이밍을 요구하는 원안은 봇으로 신뢰도
+        // 있게 검증할 수 없다(bot-coordination.md 5절). 미는 인원 게이팅이라는 핵심
+        // 협동 기믹은 그대로 유지했다.
+        GameObject block = new GameObject("PushableBlock1");
+        block.transform.position = new Vector3(16f, -3.0f, 0f);
+        block.AddComponent<SpriteRenderer>();
+        ApplySlicedSprite(block, badgeSprite, new Vector2(5f, 1f));
+        BoxCollider2D blockSolid = block.AddComponent<BoxCollider2D>();
+        blockSolid.size = new Vector2(5f, 1f);
+        // 트리거를 솔리드 콜라이더보다 "미는 반대편(왼쪽)"으로만 훨씬 크게 잡는다
+        // (offset으로 중심을 왼쪽으로 밀고, size를 그만큼 키움). 처음엔 폭만 +2.5로
+        // 좌우 균등하게 키웠는데, 그러면 블록 앞에서 대기하는 인원이 몸 폭(~0.9)만큼
+        // 밀집해서 서야 하는 "대기 공간"이 솔리드 콜라이더 바로 앞 1.25유닛뿐이라
+        // 요구 인원(3명)이 물리적으로 다 들어가지 못하고 2명에서 정체됐다(5봇
+        // 테스트로 실측). 왼쪽으로 6유닛의 대기 공간을 넉넉히 확보한다.
+        BoxCollider2D blockTrigger = block.AddComponent<BoxCollider2D>();
+        blockTrigger.isTrigger = true;
+        blockTrigger.offset = new Vector2(-3f, 0f);
+        blockTrigger.size = new Vector2(11f, 1.6f);
+        block.AddComponent<NetworkObject>();
+        block.AddComponent<NetworkTransform>();
+        PushableBlockNGO blockScript = block.AddComponent<PushableBlockNGO>();
+        blockScript.targetPoint = targetMarker.transform;
+
+        GameObject goalZone = new GameObject("GoalZone1");
+        goalZone.transform.position = new Vector3(31f, -2.2f, 0f);
+        goalZone.AddComponent<SpriteRenderer>();
+        ApplySlicedSprite(goalZone, tintableSprite, new Vector2(6f, 1.6f));
+        goalZone.GetComponent<SpriteRenderer>().color = new Color(
+            UITheme.ColorBgSecondary.r, UITheme.ColorBgSecondary.g, UITheme.ColorBgSecondary.b, 0.5f);
+        BoxCollider2D goalCollider = goalZone.AddComponent<BoxCollider2D>();
+        goalCollider.isTrigger = true;
+        goalCollider.size = new Vector2(6f, 1.6f);
+        goalZone.AddComponent<NetworkObject>();
+        GoalZoneNGO goalScript = goalZone.AddComponent<GoalZoneNGO>();
+
+        GameObject stageManagerObj = new GameObject("StageManager");
+        StageManagerNGO stageManager = stageManagerObj.AddComponent<StageManagerNGO>();
+        stageManager.goalZone = goalScript;
+
+        BuildStageClearBanner(goalScript);
+
+        EditorSceneManager.SaveScene(scene, Stage02ScenePath);
+        Debug.Log($"[FlowSetup] Stage02 씬 생성 완료: {Stage02ScenePath}");
+    }
+
+    [MenuItem("Tools/Coop Setup/Multiplayer Flow/6. Create Stage03 Scene (Key Relay)")]
+    public static void CreateStage03Scene()
+    {
+        NetworkSetupMenu.EnsureFolder(StagesFolder);
+        LoadThemeFonts();
+
+        Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+        CreateOrthoCamera(true);
+
+        Color dirtColor = new Color(0.45f, 0.32f, 0.2f);
+        Color grassColor = new Color(0.55f, 0.78f, 0.35f);
+        CreateGroundWithGrassCap(new Vector3(0f, -3f, 0f), new Vector3(18f, 1f, 1f), dirtColor, grassColor);
+        CreateGroundWithGrassCap(new Vector3(20f, -3f, 0f), new Vector3(10f, 1f, 1f), dirtColor, grassColor);
+        // 시소 아래로 떨어져도 무한정 추락하지 않게 하는 안전망 -- 이 스테이지는 실패
+        // 조건이 없으므로(hasFailCondition 미사용), 떨어진 봇이 소프트락에 빠지는 걸
+        // 막는 최소한의 장치. 완전한 복귀 경로는 사람 플레이테스트로 검증할 부분이다.
+        CreateGroundWithGrassCap(new Vector3(12f, -7f, 0f), new Vector3(8f, 1f, 1f), dirtColor, UITheme.ColorBgSecondary);
+
+        CreateSpawnPoints();
+
+        Sprite badgeSprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite(
+            "Assets/Sprites/UI_ButtonPrimary.png", UITheme.ColorPrimary, UITheme.ColorWhite);
+        Sprite tintableSprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite(
+            "Assets/Sprites/UI_RoundedWhite.png", Color.white, Color.white);
+
+        // 열쇠: 스폰 근처에서 아무나 주울 수 있다.
+        GameObject key = new GameObject("Key1");
+        key.transform.position = new Vector3(0f, -2.2f, 0f);
+        key.AddComponent<SpriteRenderer>();
+        ApplySlicedSprite(key, badgeSprite, new Vector2(0.6f, 0.6f));
+        key.AddComponent<NetworkObject>();
+        key.AddComponent<NetworkTransform>();
+        CarryableKeyNGO keyScript = key.AddComponent<CarryableKeyNGO>();
+
+        // 문: 열쇠가 문 앞 범위 안에 들어와야 열린다(누가 들고 있는지는 무관). CoopDoorNGO와
+        // 같은 tintable(흰색) 스프라이트를 써서 KeyDoorNGO가 런타임에 색만 바꿔 칠한다.
+        GameObject door = new GameObject("KeyDoor1");
+        door.transform.position = new Vector3(7f, -1.7f, 0f);
+        door.AddComponent<SpriteRenderer>();
+        ApplySlicedSprite(door, tintableSprite, new Vector2(0.45f, 1.3f));
+        BoxCollider2D doorCollider = door.AddComponent<BoxCollider2D>();
+        doorCollider.size = new Vector2(0.45f, 1.3f);
+        door.AddComponent<NetworkObject>();
+        KeyDoorNGO doorScript = door.AddComponent<KeyDoorNGO>();
+        doorScript.key = keyScript;
+
+        // 시소: 구덩이(x=9~15)를 가로지르는 회전 플랫폼. 좌/우 자식 트리거로 인원을
+        // 세고, 불균형이 심하면 기운다.
+        GameObject seesaw = new GameObject("Seesaw1");
+        seesaw.transform.position = new Vector3(12f, -2.5f, 0f);
+        seesaw.AddComponent<SpriteRenderer>();
+        ApplySlicedSprite(seesaw, badgeSprite, new Vector2(6f, 0.4f));
+        BoxCollider2D seesawCollider = seesaw.AddComponent<BoxCollider2D>();
+        seesawCollider.size = new Vector2(6f, 0.4f);
+        seesaw.AddComponent<NetworkObject>();
+        seesaw.AddComponent<NetworkTransform>();
+        SeesawPlatformNGO seesawScript = seesaw.AddComponent<SeesawPlatformNGO>();
+
+        GameObject leftZone = new GameObject("SeesawLeftZone");
+        leftZone.transform.SetParent(seesaw.transform, false);
+        leftZone.transform.localPosition = new Vector3(-1.5f, 0.3f, 0f);
+        BoxCollider2D leftCollider = leftZone.AddComponent<BoxCollider2D>();
+        leftCollider.isTrigger = true;
+        leftCollider.size = new Vector2(2.7f, 1.2f);
+        SeesawSideZone leftZoneScript = leftZone.AddComponent<SeesawSideZone>();
+        leftZoneScript.platform = seesawScript;
+        leftZoneScript.isLeftSide = true;
+
+        GameObject rightZone = new GameObject("SeesawRightZone");
+        rightZone.transform.SetParent(seesaw.transform, false);
+        rightZone.transform.localPosition = new Vector3(1.5f, 0.3f, 0f);
+        BoxCollider2D rightCollider = rightZone.AddComponent<BoxCollider2D>();
+        rightCollider.isTrigger = true;
+        rightCollider.size = new Vector2(2.7f, 1.2f);
+        SeesawSideZone rightZoneScript = rightZone.AddComponent<SeesawSideZone>();
+        rightZoneScript.platform = seesawScript;
+        rightZoneScript.isLeftSide = false;
+
+        GameObject leftHold = new GameObject("SeesawLeftHold");
+        leftHold.transform.position = new Vector3(10.5f, -2.1f, 0f);
+        GameObject rightHold = new GameObject("SeesawRightHold");
+        rightHold.transform.position = new Vector3(13.5f, -2.1f, 0f);
+        seesawScript.leftHoldPoint = leftHold.transform;
+        seesawScript.rightHoldPoint = rightHold.transform;
+
+        GameObject goalZone = new GameObject("GoalZone1");
+        goalZone.transform.position = new Vector3(20f, -2.2f, 0f);
+        goalZone.AddComponent<SpriteRenderer>();
+        ApplySlicedSprite(goalZone, tintableSprite, new Vector2(6f, 1.6f));
+        goalZone.GetComponent<SpriteRenderer>().color = new Color(
+            UITheme.ColorBgSecondary.r, UITheme.ColorBgSecondary.g, UITheme.ColorBgSecondary.b, 0.5f);
+        BoxCollider2D goalCollider = goalZone.AddComponent<BoxCollider2D>();
+        goalCollider.isTrigger = true;
+        goalCollider.size = new Vector2(6f, 1.6f);
+        goalZone.AddComponent<NetworkObject>();
+        GoalZoneNGO goalScript = goalZone.AddComponent<GoalZoneNGO>();
+
+        GameObject stageManagerObj = new GameObject("StageManager");
+        StageManagerNGO stageManager = stageManagerObj.AddComponent<StageManagerNGO>();
+        stageManager.goalZone = goalScript;
+
+        BuildStageClearBanner(goalScript);
+
+        EditorSceneManager.SaveScene(scene, Stage03ScenePath);
+        Debug.Log($"[FlowSetup] Stage03 씬 생성 완료: {Stage03ScenePath}");
+    }
+
+    [MenuItem("Tools/Coop Setup/Multiplayer Flow/7. Create Stage04 Scene (Escape Countdown)")]
+    public static void CreateStage04Scene()
+    {
+        NetworkSetupMenu.EnsureFolder(StagesFolder);
+        LoadThemeFonts();
+
+        Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+        CreateOrthoCamera(true);
+
+        CreateGroundWithGrassCap(new Vector3(10f, -3f, 0f), new Vector3(40f, 1f, 1f),
+            new Color(0.45f, 0.32f, 0.2f), new Color(0.55f, 0.78f, 0.35f));
+
+        CreateSpawnPoints();
+
+        Sprite tintableSprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite(
+            "Assets/Sprites/UI_RoundedWhite.png", Color.white, Color.white);
+
+        // 위험지대: 설계 문서는 "바닥에서 차오르는 용암 또는 좌측에서 다가오는 벽"을
+        // 동등하게 제시한다(04-escape-countdown.md). 여기서는 벽 쪽으로 구현했다 --
+        // RisingHazardNGO 참고 주석에 이유가 있다. 경고색은 UI Style Guide 토큰
+        // 범위 밖의 의도적 예외: "닿으면 죽는다"는 신호는 브랜드 그린/블루로는
+        // 전달되지 않는다.
+        GameObject hazard = new GameObject("RisingHazard1");
+        hazard.transform.position = new Vector3(-9f, 0f, 0f);
+        hazard.AddComponent<SpriteRenderer>();
+        ApplySlicedSprite(hazard, tintableSprite, new Vector2(1f, 8f));
+        hazard.GetComponent<SpriteRenderer>().color = new Color(0.9f, 0.25f, 0.15f, 0.85f);
+        BoxCollider2D hazardCollider = hazard.AddComponent<BoxCollider2D>();
+        hazardCollider.isTrigger = true;
+        hazardCollider.size = new Vector2(1f, 8f);
+        hazard.AddComponent<NetworkObject>();
+        hazard.AddComponent<NetworkTransform>();
+        RisingHazardNGO hazardScript = hazard.AddComponent<RisingHazardNGO>();
+
+        GameObject goalZone = new GameObject("GoalZone1");
+        goalZone.transform.position = new Vector3(25f, -2.2f, 0f);
+        goalZone.AddComponent<SpriteRenderer>();
+        ApplySlicedSprite(goalZone, tintableSprite, new Vector2(6f, 1.6f));
+        goalZone.GetComponent<SpriteRenderer>().color = new Color(
+            UITheme.ColorBgSecondary.r, UITheme.ColorBgSecondary.g, UITheme.ColorBgSecondary.b, 0.5f);
+        BoxCollider2D goalCollider = goalZone.AddComponent<BoxCollider2D>();
+        goalCollider.isTrigger = true;
+        goalCollider.size = new Vector2(6f, 1.6f);
+        goalZone.AddComponent<NetworkObject>();
+        GoalZoneNGO goalScript = goalZone.AddComponent<GoalZoneNGO>();
+
+        GameObject stageManagerObj = new GameObject("StageManager");
+        StageManagerNGO stageManager = stageManagerObj.AddComponent<StageManagerNGO>();
+        stageManager.goalZone = goalScript;
+        stageManager.hasFailCondition = true;
+        stageManager.hazard = hazardScript;
+        hazardScript.stageManager = stageManager;
+
+        BuildStageClearBanner(goalScript);
+
+        EditorSceneManager.SaveScene(scene, Stage04ScenePath);
+        Debug.Log($"[FlowSetup] Stage04 씬 생성 완료: {Stage04ScenePath}");
+    }
+
     [MenuItem("Tools/Coop Setup/Multiplayer Flow/4. Configure Build Settings Scenes")]
     public static void ConfigureBuildSettingsScenes()
     {
@@ -343,8 +614,11 @@ public static class GameFlowSceneSetup
             new EditorBuildSettingsScene(BootstrapScenePath, true),
             new EditorBuildSettingsScene(LobbyScenePath, true),
             new EditorBuildSettingsScene(Stage01ScenePath, true),
+            new EditorBuildSettingsScene(Stage02ScenePath, true),
+            new EditorBuildSettingsScene(Stage03ScenePath, true),
+            new EditorBuildSettingsScene(Stage04ScenePath, true),
         };
-        Debug.Log("[FlowSetup] Build Settings 씬 목록: Bootstrap(0, 부팅 씬) -> Lobby -> Stage01_Gatekeeper.");
+        Debug.Log("[FlowSetup] Build Settings 씬 목록: Bootstrap(0, 부팅 씬) -> Lobby -> Stage01~04.");
     }
 
     private static void CreateSpawnPoints()

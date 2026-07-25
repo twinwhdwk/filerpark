@@ -224,7 +224,7 @@ MonoBehaviour:
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
   ActiveSceneSynchronization: 0
-  SceneMigrationSynchronization: 0
+  SceneMigrationSynchronization: 1
   SpawnWithObservers: 1
   DontDestroyWithOwner: 0
   AutoObjectParentSync: 1
@@ -335,7 +335,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BotController
   ShowTopMostFoldoutHeaderGroup: 1
-  mode: 0
+  mode: 2
   patrolHalfWidth: 3
   followDistance: 1.5
   jumpIntervalMin: 1.5

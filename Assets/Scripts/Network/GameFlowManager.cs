@@ -241,7 +241,11 @@ public class GameFlowManager : NetworkBehaviour
         Scene stageScene = SceneManager.GetSceneByName(clearedStageName);
 
         phase.Value = GamePhase.Lobby;
-        currentStageIndex.Value = -1;
+        // currentStageIndex는 여기서 리셋하지 않는다 -- StartNextStage()가
+        // "currentStageIndex + 1"로 다음 스테이지를 고르므로, 여기서 -1로 되돌리면
+        // 매번 0번(Stage01)부터 다시 시작해 버려 stageSceneNames의 나머지 스테이지가
+        // 영원히 실행되지 않는다(1개짜리 배열일 때는 어차피 항상 0번이라 안 드러났던
+        // 버그). 순서 진행은 StartNextStage()의 래핑 로직에 맡긴다.
         lobbySceneLoaded = true;
 
         if (stageScene.IsValid())
