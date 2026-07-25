@@ -1,22 +1,15 @@
 using UnityEngine;
-using UnityEngine.SceneManagement;
-using Unity.Netcode;
 
-// NetworkManager 오브젝트에 부착. 이 오브젝트는 NetworkObject로 스폰되지 않으므로
-// NetworkBehaviour가 아닌 일반 MonoBehaviour로 작성한다 (NetworkBootstrapper와 같은
-// 이유/패턴). GoalZoneNGO의 클리어 상태를 지켜보다가 서버가
-// NetworkManager.SceneManager.LoadScene으로 모든 클라이언트를 함께 다음 씬으로
-// 데려간다 (클라이언트 각자 SceneManager.LoadScene을 부르면 씬이 갈라지므로 반드시
-// 이 경로를 통해야 한다). NetworkManager 컴포넌트의 "Enable Scene Management" 옵션이
-// 켜져 있어야 동작한다.
+// 스테이지 씬 안에 배치하는 컴포넌트 (그 스테이지의 GoalZoneNGO를 참조). 이 스테이지
+// 다음에 무엇이 오는지는 전혀 모른다 -- 클리어를 감지하면 그냥
+// GameFlowManager.Instance.NotifyStageCleared()만 부르고, 로비 복귀/다음 스테이지
+// 진행/스코어 갱신은 전부 GameFlowManager(Bootstrap 씬, 항상 로드되어 있음)가
+// 결정한다. 이 덕분에 스테이지 씬을 통째로 복사/추가해도 이 스크립트는 손댈 필요가
+// 없다 (이식성).
 public class StageManagerNGO : MonoBehaviour
 {
     [Header("연결")]
     public GoalZoneNGO goalZone;
-
-    [Header("다음 스테이지")]
-    public string nextSceneName;
-    public float transitionDelay = 2f;
 
     private void OnEnable()
     {
@@ -36,19 +29,12 @@ public class StageManagerNGO : MonoBehaviour
 
     private void HandleStageCleared(bool previousValue, bool newValue)
     {
-        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer || !newValue) return;
-        Invoke(nameof(LoadNextStage), transitionDelay);
-    }
-
-    private void LoadNextStage()
-    {
-        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer) return;
-        if (string.IsNullOrEmpty(nextSceneName))
+        if (!newValue) return;
+        if (GameFlowManager.Instance == null)
         {
-            Debug.Log("[StageManager] 다음 씬이 지정되지 않아 전환하지 않습니다 (클리어 판정 자체는 정상 동작).");
+            Debug.LogWarning("[StageManager] GameFlowManager.Instance가 없어 클리어를 알리지 못했습니다.");
             return;
         }
-        Debug.Log($"[StageManager] 다음 씬으로 전환: {nextSceneName}");
-        NetworkManager.Singleton.SceneManager.LoadScene(nextSceneName, LoadSceneMode.Single);
+        GameFlowManager.Instance.NotifyStageCleared();
     }
 }

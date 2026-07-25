@@ -6,9 +6,12 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/AlterunaPlatformer/Scenes/Main.unity
-    guid: 2cda990e2423bbf4892e6590ba056729
+    path: Assets/Scenes/Bootstrap.unity
+    guid: ac1a04244d9e1d94f851467122d49e41
   - enabled: 1
-    path: Assets/scense/main.unity
-    guid: d80707efc991867438c90ee62c2e1e89
+    path: Assets/Scenes/Lobby.unity
+    guid: b0864cbef97d806449d269efac2f7de4
+  - enabled: 1
+    path: Assets/Scenes/Stages/Stage01_Gatekeeper.unity
+    guid: 82b6d6f640a683d4a8054c76b97b20b9
   m_configObjects: {}
