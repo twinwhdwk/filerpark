@@ -8,6 +8,12 @@ Logs/
 UserSettings/
 MemoryCaptures/
 
+# Local player/server builds (produced by Assets/Editor/BuildScript.cs)
+ClientBuild/
+ServerBuild/
+build_*.log
+build_*.pid
+
 # Rider/VSCode/VS
 .vs/
 .idea/
