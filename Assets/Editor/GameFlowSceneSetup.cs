@@ -355,13 +355,17 @@ public static class GameFlowSceneSetup
             "Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorPrimary, 40f, 6f);
         bannerImage.type = Image.Type.Sliced;
 
-        Text clearText = CreateLabel(banner.transform, "ClearText", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(600f, 220f),
-            110, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold);
+        Text clearText = CreateLabel(banner.transform, "ClearText", new Vector2(0.5f, 0.5f), new Vector2(0f, 30f), new Vector2(600f, 150f),
+            90, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold);
+
+        Text clearSubText = CreateLabel(banner.transform, "ClearSubText", new Vector2(0.5f, 0.5f), new Vector2(0f, -70f), new Vector2(560f, 60f),
+            26, UITheme.ColorFg, TextAnchor.MiddleCenter, bodyMediumFont);
 
         StageClearUI clearUI = canvasObj.AddComponent<StageClearUI>();
         clearUI.goalZone = goalZone;
         clearUI.clearBanner = banner;
         clearUI.clearText = clearText;
+        clearUI.clearSubText = clearSubText;
     }
 
     [MenuItem("Tools/Coop Setup/Multiplayer Flow/5. Create Stage02 Scene (Block Carry)")]

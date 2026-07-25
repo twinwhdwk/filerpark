@@ -11,6 +11,7 @@ public class StageClearUI : MonoBehaviour
     public GoalZoneNGO goalZone;
     public GameObject clearBanner;
     public Text clearText;
+    public Text clearSubText;
 
     private void OnEnable()
     {
@@ -40,6 +41,15 @@ public class StageClearUI : MonoBehaviour
         if (clearText != null)
         {
             clearText.text = "CLEAR!";
+        }
+        // "CLEAR!"만 뜨고 몇 초간 아무 안내 없이 멈춰 있으면 멎은 것처럼 보인다 --
+        // GameFlowManager.resultsDisplaySeconds 동안 실제로는 로비로 돌아갈 준비를
+        // 하고 있다는 걸 알려준다. 정확한 초 단위 카운트다운은 아니다 (StageClearUI는
+        // GameFlowManager를 몰라도 되게 만든 의도적 설계라, resultsDisplaySeconds 값을
+        // 끌어오지 않는다) -- 단순 안내 문구로 충분하다.
+        if (clearSubText != null)
+        {
+            clearSubText.text = "대기실로 돌아갑니다...";
         }
     }
 }
