@@ -62,6 +62,7 @@ public class GameFlowManager : NetworkBehaviour
         if (!IsServer) return;
 
         NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
+        NetworkManager.Singleton.OnClientDisconnectCallback += HandleClientDisconnected;
         NetworkManager.Singleton.SceneManager.OnLoadEventCompleted += HandleLoadEventCompleted;
         NetworkManager.Singleton.SceneManager.OnUnloadEventCompleted += HandleUnloadEventCompleted;
 
@@ -75,10 +76,23 @@ public class GameFlowManager : NetworkBehaviour
 
         if (NetworkManager.Singleton == null) return;
         NetworkManager.Singleton.OnClientConnectedCallback -= HandleClientConnected;
+        NetworkManager.Singleton.OnClientDisconnectCallback -= HandleClientDisconnected;
         if (NetworkManager.Singleton.SceneManager != null)
         {
             NetworkManager.Singleton.SceneManager.OnLoadEventCompleted -= HandleLoadEventCompleted;
             NetworkManager.Singleton.SceneManager.OnUnloadEventCompleted -= HandleUnloadEventCompleted;
+        }
+    }
+
+    // scores에서 접속 해제된 clientId를 안 지우면, 24/7 떠 있는 GCP 데디케이티드
+    // 서버에서 사람들이 들어왔다 나갈 때마다 유령 항목이 영원히 쌓인다 -- NGO는
+    // clientId를 재사용하지 않으므로 재접속으로도 덮어써지지 않는다. 스코어보드에
+    // 접속 해제된 플레이어가 계속 표시되는 게 눈에 보이는 증상이다.
+    private void HandleClientDisconnected(ulong clientId)
+    {
+        if (scores.Remove(clientId))
+        {
+            BroadcastScoreboard();
         }
     }
 
