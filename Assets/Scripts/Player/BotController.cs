@@ -193,7 +193,8 @@ public class BotController : NetworkBehaviour
             if (key.carrierClientId.Value != OwnerClientId)
             {
                 MoveToward(key.transform.position);
-                if (Vector2.Distance(transform.position, key.transform.position) < key.pickupRadius * 0.8f)
+                float distToKey = Vector2.Distance(transform.position, key.transform.position);
+                if (distToKey < key.pickupRadius * 0.8f)
                 {
                     key.RequestPickupServerRpc();
                 }

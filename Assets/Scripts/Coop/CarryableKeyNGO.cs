@@ -9,7 +9,12 @@ public class CarryableKeyNGO : NetworkBehaviour
 {
     private const ulong NoCarrier = ulong.MaxValue;
 
-    public float pickupRadius = 1f;
+    // 봇(그리고 사람 클라이언트도 마찬가지)이 "가까워졌다"고 판단하는 로컬
+    // transform.position은 서버의 NetworkTransform 보간을 거친 값이라 실시간
+    // 권위 위치보다 살짝 지연된다. 5봇 테스트에서 실측한 그 오차가 대략 0.2 유닛
+    // 수준이었는데(예: 로컬은 0.8 안쪽이라 픽업을 시도했지만 서버 판정 거리는
+    // 1.19였음), 반경을 1이 아니라 넉넉하게 잡아 그 오차를 흡수한다.
+    public float pickupRadius = 2f;
     public Vector3 carryOffset = new Vector3(0f, 0.9f, 0f);
 
     public readonly NetworkVariable<ulong> carrierClientId = new NetworkVariable<ulong>(
