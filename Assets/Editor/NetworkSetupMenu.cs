@@ -15,6 +15,34 @@ public static class NetworkSetupMenu
     private const string ServerAddress = "34.50.24.161";
     private const ushort ServerPort = 7777;
 
+    // NGO 2.x의 NetworkManager Inspector에는 (1.x와 달리) Play 모드에서 자동으로
+    // 뜨는 Start Host/Server/Client 버튼이 없다. 그 존재 여부를 더 알아보는 대신,
+    // 여기 메뉴 항목으로 바로 대체한다 -- Play 모드에서만 활성화된다.
+    [MenuItem("Tools/Coop Setup/Debug: Start Host (Play 모드 중에만)")]
+    public static void DebugStartHost()
+    {
+        if (NetworkManager.Singleton == null)
+        {
+            Debug.LogError("NetworkManager.Singleton이 없습니다. Play 모드인지, 씬에 NetworkManager가 있는지 확인하세요.");
+            return;
+        }
+
+        if (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsClient)
+        {
+            Debug.LogWarning("이미 Host/Server/Client가 실행 중입니다.");
+            return;
+        }
+
+        bool started = NetworkManager.Singleton.StartHost();
+        Debug.Log(started ? "StartHost() 성공 -- 캐릭터가 스폰됐는지 Game 뷰를 확인하세요." : "StartHost() 실패.");
+    }
+
+    [MenuItem("Tools/Coop Setup/Debug: Start Host (Play 모드 중에만)", true)]
+    public static bool ValidateDebugStartHost()
+    {
+        return EditorApplication.isPlaying;
+    }
+
     [MenuItem("Tools/Coop Setup/1. Create NetworkManager")]
     public static void CreateNetworkManager()
     {
