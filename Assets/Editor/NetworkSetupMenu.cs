@@ -469,6 +469,299 @@ public static class NetworkSetupMenu
         Debug.Log("CoopButton1 -> CoopDoor1 -> GoalZone1 배치 및 연결 완료, 씬 저장까지 마쳤습니다.");
     }
 
+    // Docs/Stages/*.md 설계문서의 4개 미션을 StageDefinition 애셋으로 만든다.
+    // 이미 있으면 값만 덮어써서(create-or-update) 문서를 고치고 다시 실행하면
+    // 애셋도 같이 갱신되게 한다.
+    [MenuItem("Tools/Coop Setup/7. Create Stage Catalog (4 Missions)")]
+    public static void CreateStageCatalog()
+    {
+        const string folder = "Assets/StageData";
+        EnsureFolder(folder);
+
+        StageDefinition[] stages =
+        {
+            CreateOrUpdateStage(folder, "Stage01_Gatekeeper", "stage-01", 0,
+                "GATEKEEPER", "문지기",
+                "N-1개의 버튼을 동시에 밟고 있어야 문이 열린다. 자유로운 1명이 먼저 통과하고, 버튼 담당들이 릴레이로 합류한다.",
+                StageTheme.SimultaneousSwitches, 4, 6),
+            CreateOrUpdateStage(folder, "Stage02_BlockCarry", "stage-02", 1,
+                "BLOCK CARRY", "돌덩이 운반",
+                "여럿이 함께 밀어야 움직이는 돌덩이로 발판을 만들고, 그 위로 스택해서 높은 벽을 넘는다.",
+                StageTheme.StackAndPush, 4, 6),
+            CreateOrUpdateStage(folder, "Stage03_KeyRelay", "stage-03", 2,
+                "KEY RELAY", "열쇠 릴레이",
+                "공유 열쇠를 릴레이로 날라 문을 열고, 양쪽 무게를 맞춰야 하는 시소 다리를 건넌다.",
+                StageTheme.CarryAndBalance, 4, 6),
+            CreateOrUpdateStage(folder, "Stage04_EscapeCountdown", "stage-04", 3,
+                "ESCAPE COUNTDOWN", "탈출 카운트다운",
+                "서서히 차오르는 용암을 피해 전원이 발맞춰 골까지 가야 한다. 낙오자가 생기면 전원 실패.",
+                StageTheme.SharedSurvival, 4, 6),
+        };
+
+        string catalogPath = folder + "/StageCatalog.asset";
+        StageCatalog catalog = AssetDatabase.LoadAssetAtPath<StageCatalog>(catalogPath);
+        if (catalog == null)
+        {
+            catalog = ScriptableObject.CreateInstance<StageCatalog>();
+            AssetDatabase.CreateAsset(catalog, catalogPath);
+        }
+        catalog.stages = stages;
+        EditorUtility.SetDirty(catalog);
+
+        AssetDatabase.SaveAssets();
+        Selection.activeObject = catalog;
+
+        Debug.Log($"스테이지 카탈로그 생성/갱신 완료: {catalogPath} ({stages.Length}개 스테이지, Docs/Stages/ 설계문서와 대응).");
+    }
+
+    private static StageDefinition CreateOrUpdateStage(string folder, string assetName, string stageId, int order,
+        string titleEn, string subtitleKr, string descriptionKr, StageTheme theme, int minPlayers, int maxPlayers)
+    {
+        string path = $"{folder}/{assetName}.asset";
+        StageDefinition stage = AssetDatabase.LoadAssetAtPath<StageDefinition>(path);
+        if (stage == null)
+        {
+            stage = ScriptableObject.CreateInstance<StageDefinition>();
+            AssetDatabase.CreateAsset(stage, path);
+        }
+
+        stage.stageId = stageId;
+        stage.order = order;
+        stage.titleEn = titleEn;
+        stage.subtitleKr = subtitleKr;
+        stage.descriptionKr = descriptionKr;
+        stage.theme = theme;
+        stage.minPlayers = minPlayers;
+        stage.maxPlayers = maxPlayers;
+
+        EditorUtility.SetDirty(stage);
+        return stage;
+    }
+
+    // "게임내 맵 화면"(스테이지 노드 선택) + "게임 스테이지 화면"(선택한 스테이지 상세)을
+    // 한 캔버스에 같이 만든다. 실제 게임플레이 로딩은 아직 없으므로(Docs/Stages는 설계
+    // 문서 단계) 시작 버튼은 로그만 남기는 자리표시자다 -- WorldMapUI/StageIntroUI의
+    // 코드 주석 참고.
+    [MenuItem("Tools/Coop Setup/8. Create World Map + Stage Intro UI")]
+    public static void CreateWorldMapUI()
+    {
+        EnsureSceneOpen();
+
+        StageCatalog catalog = AssetDatabase.LoadAssetAtPath<StageCatalog>("Assets/StageData/StageCatalog.asset");
+        if (catalog == null || catalog.stages == null || catalog.stages.Length == 0)
+        {
+            Debug.LogError("StageCatalog가 없습니다. 먼저 '7. Create Stage Catalog (4 Missions)'를 실행하세요.");
+            return;
+        }
+
+        if (Object.FindFirstObjectByType<EventSystem>() == null)
+        {
+            GameObject eventSystemObj = new GameObject("EventSystem");
+            eventSystemObj.AddComponent<EventSystem>();
+            eventSystemObj.AddComponent<StandaloneInputModule>();
+            Undo.RegisterCreatedObjectUndo(eventSystemObj, "Create EventSystem");
+        }
+
+        GameObject canvasObj = GameObject.Find("WorldMapCanvas");
+        if (canvasObj == null)
+        {
+            canvasObj = new GameObject("WorldMapCanvas");
+            Canvas canvas = canvasObj.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            canvasObj.AddComponent<GraphicRaycaster>();
+            Undo.RegisterCreatedObjectUndo(canvasObj, "Create World Map UI");
+        }
+
+        WorldMapUI worldMap = GetOrAddComponent<WorldMapUI>(canvasObj);
+        worldMap.catalog = catalog;
+
+        // ---- 맵 패널 ----
+        GameObject mapPanel = FindChild(canvasObj.transform, "MapPanel");
+        if (mapPanel == null)
+        {
+            mapPanel = new GameObject("MapPanel");
+            mapPanel.transform.SetParent(canvasObj.transform, false);
+        }
+        RectTransform mapPanelRect = GetOrAddComponent<RectTransform>(mapPanel);
+        mapPanelRect.anchorMin = Vector2.zero;
+        mapPanelRect.anchorMax = Vector2.one;
+        mapPanelRect.offsetMin = Vector2.zero;
+        mapPanelRect.offsetMax = Vector2.zero;
+        Image mapBg = GetOrAddComponent<Image>(mapPanel);
+        mapBg.sprite = GetOrCreatePlaceholderSprite();
+        mapBg.color = UITheme.ColorBgSecondary;
+        worldMap.mapPanel = mapPanel;
+
+        Text mapTitleText = CreateOrGetLabel(mapPanel.transform, "MapTitle", new Vector2(0f, 380f), new Vector2(1200f, 140f),
+            UITheme.FontHeadingPath, 64, UITheme.ColorPrimary, TextAnchor.MiddleCenter);
+        mapTitleText.text = "STAGE SELECT";
+        mapTitleText.fontStyle = FontStyle.Bold;
+
+        // 노드 4개를 가로로 나열. Pico Park 2의 WORLD 모드 스테이지 선택 화면을 참고한 배치.
+        int nodeCount = catalog.stages.Length;
+        const float spacing = 340f;
+        float startX = -spacing * (nodeCount - 1) / 2f;
+
+        for (int i = 0; i < nodeCount; i++)
+        {
+            StageDefinition stage = catalog.stages[i];
+            string nodeName = $"StageNode_{i}";
+
+            GameObject nodeObj = FindChild(mapPanel.transform, nodeName);
+            if (nodeObj == null)
+            {
+                nodeObj = new GameObject(nodeName);
+                nodeObj.transform.SetParent(mapPanel.transform, false);
+            }
+            RectTransform nodeRect = GetOrAddComponent<RectTransform>(nodeObj);
+            nodeRect.anchorMin = new Vector2(0.5f, 0.5f);
+            nodeRect.anchorMax = new Vector2(0.5f, 0.5f);
+            nodeRect.sizeDelta = new Vector2(280f, 200f);
+            nodeRect.anchoredPosition = new Vector2(startX + spacing * i, 0f);
+
+            Image nodeImage = GetOrAddComponent<Image>(nodeObj);
+            nodeImage.sprite = GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonPrimary.png", UITheme.ColorPrimary, UITheme.ColorWhite);
+            nodeImage.type = Image.Type.Sliced;
+
+            Button nodeButton = GetOrAddComponent<Button>(nodeObj);
+            nodeButton.targetGraphic = nodeImage;
+            nodeButton.onClick = new Button.ButtonClickedEvent();
+
+            StageNodeButton nodeScript = GetOrAddComponent<StageNodeButton>(nodeObj);
+            nodeScript.worldMap = worldMap;
+            nodeScript.stageIndex = i;
+            UnityEditor.Events.UnityEventTools.AddPersistentListener(nodeButton.onClick, nodeScript.NotifyClicked);
+
+            Text nodeLabel = CreateOrGetLabel(nodeObj.transform, "Label", Vector2.zero, new Vector2(260f, 180f),
+                UITheme.FontBodyBoldPath, 26, UITheme.ColorWhite, TextAnchor.MiddleCenter);
+            nodeLabel.supportRichText = true;
+            nodeLabel.text = $"{i + 1}. {stage.titleEn}\n<size=20>{stage.subtitleKr}</size>";
+        }
+
+        // ---- 스테이지 인트로 패널 (노드 클릭 시 표시, 기본은 숨김) ----
+        GameObject introPanel = FindChild(canvasObj.transform, "StageIntroPanel");
+        if (introPanel == null)
+        {
+            introPanel = new GameObject("StageIntroPanel");
+            introPanel.transform.SetParent(canvasObj.transform, false);
+        }
+        RectTransform introRect = GetOrAddComponent<RectTransform>(introPanel);
+        introRect.anchorMin = Vector2.zero;
+        introRect.anchorMax = Vector2.one;
+        introRect.offsetMin = Vector2.zero;
+        introRect.offsetMax = Vector2.zero;
+        Image introBg = GetOrAddComponent<Image>(introPanel);
+        introBg.sprite = GetOrCreatePlaceholderSprite();
+        introBg.color = UITheme.ColorBg;
+
+        StageIntroUI stageIntro = GetOrAddComponent<StageIntroUI>(introPanel);
+        worldMap.stageIntro = stageIntro;
+
+        Text introTitle = CreateOrGetLabel(introPanel.transform, "IntroTitle", new Vector2(0f, 260f), new Vector2(1100f, 140f),
+            UITheme.FontHeadingPath, 80, UITheme.ColorPrimary, TextAnchor.MiddleCenter);
+        introTitle.fontStyle = FontStyle.Bold;
+        stageIntro.titleText = introTitle;
+
+        Text introSubtitle = CreateOrGetLabel(introPanel.transform, "IntroSubtitle", new Vector2(0f, 170f), new Vector2(1100f, 80f),
+            UITheme.FontBodyBoldPath, 40, UITheme.ColorFg, TextAnchor.MiddleCenter);
+        stageIntro.subtitleText = introSubtitle;
+
+        Text introTheme = CreateOrGetLabel(introPanel.transform, "IntroTheme", new Vector2(0f, 110f), new Vector2(1100f, 50f),
+            UITheme.FontBodyMediumPath, 26, UITheme.ColorIce, TextAnchor.MiddleCenter);
+        stageIntro.themeTagText = introTheme;
+
+        Text introDescription = CreateOrGetLabel(introPanel.transform, "IntroDescription", new Vector2(0f, 0f), new Vector2(1100f, 160f),
+            UITheme.FontBodyMediumPath, 28, UITheme.ColorFg, TextAnchor.MiddleCenter);
+        stageIntro.descriptionText = introDescription;
+
+        Text introPlayerCount = CreateOrGetLabel(introPanel.transform, "IntroPlayerCount", new Vector2(0f, -100f), new Vector2(1100f, 50f),
+            UITheme.FontBodyMediumPath, 26, UITheme.ColorFg, TextAnchor.MiddleCenter);
+        stageIntro.playerCountText = introPlayerCount;
+
+        // 시작/뒤로 버튼 -- ConnectButton과 동일한 라운드 스프라이트 재사용.
+        Sprite roundedSprite = GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonPrimary.png", UITheme.ColorPrimary, UITheme.ColorWhite);
+
+        GameObject startBtnObj = FindChild(introPanel.transform, "StartButton");
+        if (startBtnObj == null)
+        {
+            startBtnObj = new GameObject("StartButton");
+            startBtnObj.transform.SetParent(introPanel.transform, false);
+        }
+        RectTransform startRect = GetOrAddComponent<RectTransform>(startBtnObj);
+        startRect.anchorMin = new Vector2(0.5f, 0.5f);
+        startRect.anchorMax = new Vector2(0.5f, 0.5f);
+        startRect.sizeDelta = new Vector2(260f, 80f);
+        startRect.anchoredPosition = new Vector2(150f, -230f);
+        Image startImage = GetOrAddComponent<Image>(startBtnObj);
+        startImage.sprite = roundedSprite;
+        startImage.type = Image.Type.Sliced;
+        Button startButton = GetOrAddComponent<Button>(startBtnObj);
+        startButton.targetGraphic = startImage;
+        startButton.onClick = new Button.ButtonClickedEvent();
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(startButton.onClick, stageIntro.OnStartPressed);
+        Text startLabel = CreateOrGetLabel(startBtnObj.transform, "Label", Vector2.zero, new Vector2(260f, 80f),
+            UITheme.FontBodyBoldPath, 30, UITheme.ColorWhite, TextAnchor.MiddleCenter);
+        startLabel.text = "시작";
+
+        GameObject backBtnObj = FindChild(introPanel.transform, "BackButton");
+        if (backBtnObj == null)
+        {
+            backBtnObj = new GameObject("BackButton");
+            backBtnObj.transform.SetParent(introPanel.transform, false);
+        }
+        RectTransform backRect = GetOrAddComponent<RectTransform>(backBtnObj);
+        backRect.anchorMin = new Vector2(0.5f, 0.5f);
+        backRect.anchorMax = new Vector2(0.5f, 0.5f);
+        backRect.sizeDelta = new Vector2(260f, 80f);
+        backRect.anchoredPosition = new Vector2(-150f, -230f);
+        Image backImage = GetOrAddComponent<Image>(backBtnObj);
+        backImage.sprite = roundedSprite;
+        backImage.type = Image.Type.Sliced;
+        Button backButton = GetOrAddComponent<Button>(backBtnObj);
+        backButton.targetGraphic = backImage;
+        backButton.onClick = new Button.ButtonClickedEvent();
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(backButton.onClick, worldMap.ReturnToMap);
+        Text backLabel = CreateOrGetLabel(backBtnObj.transform, "Label", Vector2.zero, new Vector2(260f, 80f),
+            UITheme.FontBodyBoldPath, 30, UITheme.ColorWhite, TextAnchor.MiddleCenter);
+        backLabel.text = "뒤로";
+
+        introPanel.SetActive(false);
+
+        Selection.activeGameObject = canvasObj;
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        EditorSceneManager.SaveOpenScenes();
+
+        Debug.Log($"WorldMapCanvas 생성/갱신 완료 -- 스테이지 노드 {nodeCount}개 + 인트로 패널 연결됨. " +
+            "실제 스테이지 게임플레이 로딩은 아직 미구현(Docs/Stages 설계 문서 단계)이라 '시작' 버튼은 로그만 남깁니다.");
+    }
+
+    private static Text CreateOrGetLabel(Transform parent, string name, Vector2 anchoredPosition, Vector2 size,
+        string fontPath, int fontSize, Color color, TextAnchor alignment)
+    {
+        GameObject obj = FindChild(parent, name);
+        if (obj == null)
+        {
+            obj = new GameObject(name);
+            obj.transform.SetParent(parent, false);
+        }
+
+        RectTransform rect = GetOrAddComponent<RectTransform>(obj);
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.sizeDelta = size;
+        rect.anchoredPosition = anchoredPosition;
+
+        Text text = GetOrAddComponent<Text>(obj);
+        text.font = AssetDatabase.LoadAssetAtPath<Font>(fontPath);
+        text.fontSize = fontSize;
+        text.color = color;
+        text.alignment = alignment;
+        return text;
+    }
+
     // 사람 파트너 없이 협동 기믹을 반복 테스트하기 위한 봇 클라이언트 실행기.
     // 실제로는 빌드된 클라이언트 실행 파일을 -bot 인자로 여러 개 띄우는 것 --
     // BotProcess/BotController가 각 프로세스 안에서 자동 접속 + 자동 조작을 담당한다.

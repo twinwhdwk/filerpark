@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10af446a3b1a80747a185b13e83af471, type: 3}
+  m_Name: Stage04_EscapeCountdown
+  m_EditorClassIdentifier: Assembly-CSharp::StageDefinition
+  stageId: stage-04
+  order: 3
+  titleEn: ESCAPE COUNTDOWN
+  subtitleKr: "\uD0C8\uCD9C \uCE74\uC6B4\uD2B8\uB2E4\uC6B4"
+  descriptionKr: "\uC11C\uC11C\uD788 \uCC28\uC624\uB974\uB294 \uC6A9\uC554\uC744
+    \uD53C\uD574 \uC804\uC6D0\uC774 \uBC1C\uB9DE\uCDB0 \uACE8\uAE4C\uC9C0 \uAC00\uC57C
+    \uD55C\uB2E4. \uB099\uC624\uC790\uAC00 \uC0DD\uAE30\uBA74 \uC804\uC6D0 \uC2E4\uD328."
+  theme: 3
+  minPlayers: 4
+  maxPlayers: 6
+  sceneName: 
