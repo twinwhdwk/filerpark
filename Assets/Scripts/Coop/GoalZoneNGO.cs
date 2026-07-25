@@ -37,6 +37,7 @@ public class GoalZoneNGO : NetworkBehaviour
         int connectedPlayers = NetworkManager.Singleton.ConnectedClientsIds.Count;
         if (connectedPlayers > 0 && playersInZone.Count >= connectedPlayers)
         {
+            Debug.Log($"[GoalZone] {gameObject.name} 스테이지 클리어 -- 전원({connectedPlayers}명) 도달");
             stageCleared.Value = true;
         }
     }

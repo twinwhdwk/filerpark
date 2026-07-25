@@ -297,6 +297,106 @@ public static class NetworkSetupMenu
         Debug.Log("ConnectCanvas 생성 완료 -- 버튼 클릭 시 NetworkBootstrapper.ConnectToServer() 호출되도록 연결됨. Ctrl+S로 저장하세요.");
     }
 
+    // CLAUDE.md UI Style Guide 색상 토큰 (PICO PARK 2 bundle.css 기반). 새 UI/기믹
+    // 색상을 추가할 때는 여기 토큰을 재사용하고, 임의 색을 새로 만들지 않는다.
+    private static readonly Color ColorPrimary = new Color(0.282f, 0.678f, 0.082f);       // #48ad15
+    private static readonly Color ColorBgSecondary = new Color(0.914f, 0.984f, 0.875f);   // #e9fbdf
+
+    private const string ScenePath = "Assets/scense/main.unity";
+
+    // -executeMethod로 헤드리스 실행하면 Editor 실행 시점에 어떤 씬도 자동으로
+    // 열리지 않는다 (사람이 GUI로 열어둔 씬을 그대로 쓰는 게 아니라 빈 임시 씬에서
+    // 시작함) -- main.unity를 명시적으로 열어야 우리가 만든 NetworkManager 등을
+    // 찾을 수 있다.
+    private static void EnsureSceneOpen()
+    {
+        if (EditorSceneManager.GetActiveScene().path != ScenePath)
+        {
+            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+        }
+    }
+
+    [MenuItem("Tools/Coop Setup/6. Create Coop Test (Button/Door/GoalZone)")]
+    public static void CreateCoopTest()
+    {
+        EnsureSceneOpen();
+
+        if (GameObject.Find("CoopButton1") != null)
+        {
+            Debug.LogWarning("CoopButton1이 이미 씬에 있어서 새로 만들지 않았습니다.");
+            return;
+        }
+
+        Sprite sprite = GetOrCreatePlaceholderSprite();
+
+        // 버튼: color-primary. 밟으면 바로 문이 열리도록 requiredButtons=1로 둔다 --
+        // 봇 2개가 동시에 서로 다른 버튼 두 개를 밟는 걸 보장할 방법이 없어서
+        // (같은 스폰에서 출발해 같은 Patrol 로직을 타므로 사실상 같이 움직인다),
+        // 이 자동 테스트에서는 "버튼 1개 -> 문" 파이프라인 자체의 동작 검증에 집중한다.
+        GameObject button = new GameObject("CoopButton1");
+        button.transform.position = new Vector3(2f, -2.2f, 0f);
+        SpriteRenderer buttonSprite = button.AddComponent<SpriteRenderer>();
+        buttonSprite.sprite = sprite;
+        buttonSprite.color = ColorPrimary;
+        button.transform.localScale = new Vector3(0.6f, 0.2f, 1f);
+        BoxCollider2D buttonCollider = button.AddComponent<BoxCollider2D>();
+        buttonCollider.isTrigger = true;
+        button.AddComponent<NetworkObject>();
+        CoopButtonNGO buttonScript = button.AddComponent<CoopButtonNGO>();
+
+        // 문: 색은 CoopDoorNGO.UpdateDoorVisuals가 OnNetworkSpawn 때 스스로 칠한다
+        // (color-ice) -- 여기서는 크기/충돌체만 잡아준다.
+        GameObject door = new GameObject("CoopDoor1");
+        door.transform.position = new Vector3(4f, -1.7f, 0f);
+        SpriteRenderer doorSprite = door.AddComponent<SpriteRenderer>();
+        doorSprite.sprite = sprite;
+        door.transform.localScale = new Vector3(0.4f, 1.2f, 1f);
+        door.AddComponent<BoxCollider2D>();
+        door.AddComponent<NetworkObject>();
+        CoopDoorNGO doorScript = door.AddComponent<CoopDoorNGO>();
+        doorScript.requiredButtons = 1;
+
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(buttonScript.OnButtonPress, doorScript.AddPress);
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(buttonScript.OnButtonRelease, doorScript.RemovePress);
+
+        // 골 존: color-bg-secondary, 반투명 트리거. BotController의 Patrol 범위
+        // (스폰 기준 ±patrolHalfWidth, 기본 3유닛)를 폭 넉넉히 덮어서 봇들이
+        // 패트롤하는 동안 자연스럽게 항상 안에 들어와 있도록 한다.
+        GameObject goalZone = new GameObject("GoalZone1");
+        goalZone.transform.position = new Vector3(0f, -2.2f, 0f);
+        SpriteRenderer goalSprite = goalZone.AddComponent<SpriteRenderer>();
+        goalSprite.sprite = sprite;
+        goalSprite.color = new Color(ColorBgSecondary.r, ColorBgSecondary.g, ColorBgSecondary.b, 0.4f);
+        goalZone.transform.localScale = new Vector3(7f, 1.5f, 1f);
+        BoxCollider2D goalCollider = goalZone.AddComponent<BoxCollider2D>();
+        goalCollider.isTrigger = true;
+        goalZone.AddComponent<NetworkObject>();
+        GoalZoneNGO goalScript = goalZone.AddComponent<GoalZoneNGO>();
+
+        GameObject networkManagerObj = GameObject.Find("NetworkManager");
+        if (networkManagerObj != null)
+        {
+            StageManagerNGO stageManager = networkManagerObj.GetComponent<StageManagerNGO>();
+            if (stageManager == null)
+            {
+                stageManager = networkManagerObj.AddComponent<StageManagerNGO>();
+            }
+            stageManager.goalZone = goalScript;
+            EditorUtility.SetDirty(networkManagerObj);
+        }
+        else
+        {
+            Debug.LogWarning("NetworkManager를 못 찾아서 StageManagerNGO를 연결하지 못했습니다. 먼저 '1. Create NetworkManager'를 실행하세요.");
+        }
+
+        Undo.RegisterCreatedObjectUndo(button, "Create Coop Test");
+        Selection.objects = new Object[] { button, door, goalZone };
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        EditorSceneManager.SaveOpenScenes();
+
+        Debug.Log("CoopButton1 -> CoopDoor1 -> GoalZone1 배치 및 연결 완료, 씬 저장까지 마쳤습니다.");
+    }
+
     // 사람 파트너 없이 협동 기믹을 반복 테스트하기 위한 봇 클라이언트 실행기.
     // 실제로는 빌드된 클라이언트 실행 파일을 -bot 인자로 여러 개 띄우는 것 --
     // BotProcess/BotController가 각 프로세스 안에서 자동 접속 + 자동 조작을 담당한다.

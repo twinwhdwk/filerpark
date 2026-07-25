@@ -43,7 +43,12 @@ public class StageManagerNGO : MonoBehaviour
     private void LoadNextStage()
     {
         if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer) return;
-        if (string.IsNullOrEmpty(nextSceneName)) return;
+        if (string.IsNullOrEmpty(nextSceneName))
+        {
+            Debug.Log("[StageManager] 다음 씬이 지정되지 않아 전환하지 않습니다 (클리어 판정 자체는 정상 동작).");
+            return;
+        }
+        Debug.Log($"[StageManager] 다음 씬으로 전환: {nextSceneName}");
         NetworkManager.Singleton.SceneManager.LoadScene(nextSceneName, LoadSceneMode.Single);
     }
 }
