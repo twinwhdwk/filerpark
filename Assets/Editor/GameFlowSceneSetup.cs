@@ -306,16 +306,20 @@ public static class GameFlowSceneSetup
         StageManagerNGO stageManager = stageManagerObj.AddComponent<StageManagerNGO>();
         stageManager.goalZone = goalScript;
 
-        BuildStageClearBanner(goalScript);
+        BuildStageUI(goalScript, "Stage 1 · Gatekeeper");
 
         EditorSceneManager.SaveScene(scene, Stage01ScenePath);
         Debug.Log($"[FlowSetup] Stage01 씬 생성 완료: {Stage01ScenePath}");
     }
 
-    // 클리어 배너: GoalZoneNGO.stageCleared를 지켜보다가(StageClearUI) 카드 패널을
-    // 띄운다. GameFlowManager가 결과 화면(4초)을 보여주는 동안 화면에 남아 있다가,
-    // 다음 스테이지 씬이 로드되면 이 오브젝트 자체가 통째로 사라지며 자연스럽게 정리된다.
-    private static void BuildStageClearBanner(GoalZoneNGO goalZone)
+    // 스테이지 이름 배지 + 클리어 배너를 한 캔버스에 만든다.
+    //  - 이름 배지: 화면 위쪽에 항상 떠 있는 작은 라벨. 게임 월드 위에 겹치므로 배경
+    //    패널 없이 두꺼운 아웃라인만으로 어떤 배경에서도 읽히게 한다 (플랫 채움 +
+    //    굵은 테두리라는 UI Style Guide의 "배지" 형태를 텍스트에 적용한 것).
+    //  - 클리어 배너: GoalZoneNGO.stageCleared를 지켜보다가(StageClearUI) 카드 패널을
+    //    띄운다. GameFlowManager가 결과 화면(4초)을 보여주는 동안 화면에 남아 있다가,
+    //    다음 스테이지 씬이 로드되면 이 오브젝트 자체가 통째로 사라지며 자연스럽게 정리된다.
+    private static void BuildStageUI(GoalZoneNGO goalZone, string stageLabel)
     {
         if (Object.FindFirstObjectByType<EventSystem>() == null)
         {
@@ -331,6 +335,14 @@ public static class GameFlowSceneSetup
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920f, 1080f);
         canvasObj.AddComponent<GraphicRaycaster>();
+
+        Text stageLabelText = CreateLabel(canvasObj.transform, "StageLabel",
+            new Vector2(0.5f, 1f), new Vector2(0f, -36f), new Vector2(1000f, 70f),
+            40, UITheme.ColorWhite, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold);
+        stageLabelText.text = stageLabel.ToUpperInvariant();
+        Outline stageLabelOutline = stageLabelText.gameObject.AddComponent<Outline>();
+        stageLabelOutline.effectColor = UITheme.ColorFg;
+        stageLabelOutline.effectDistance = new Vector2(2f, -2f);
 
         GameObject banner = new GameObject("ClearBanner");
         banner.transform.SetParent(canvasObj.transform, false);
@@ -432,7 +444,7 @@ public static class GameFlowSceneSetup
         StageManagerNGO stageManager = stageManagerObj.AddComponent<StageManagerNGO>();
         stageManager.goalZone = goalScript;
 
-        BuildStageClearBanner(goalScript);
+        BuildStageUI(goalScript, "Stage 2 · Block Carry");
 
         EditorSceneManager.SaveScene(scene, Stage02ScenePath);
         Debug.Log($"[FlowSetup] Stage02 씬 생성 완료: {Stage02ScenePath}");
@@ -540,7 +552,7 @@ public static class GameFlowSceneSetup
         StageManagerNGO stageManager = stageManagerObj.AddComponent<StageManagerNGO>();
         stageManager.goalZone = goalScript;
 
-        BuildStageClearBanner(goalScript);
+        BuildStageUI(goalScript, "Stage 3 · Key Relay");
 
         EditorSceneManager.SaveScene(scene, Stage03ScenePath);
         Debug.Log($"[FlowSetup] Stage03 씬 생성 완료: {Stage03ScenePath}");
@@ -600,7 +612,7 @@ public static class GameFlowSceneSetup
         stageManager.hazard = hazardScript;
         hazardScript.stageManager = stageManager;
 
-        BuildStageClearBanner(goalScript);
+        BuildStageUI(goalScript, "Stage 4 · Escape Countdown");
 
         EditorSceneManager.SaveScene(scene, Stage04ScenePath);
         Debug.Log($"[FlowSetup] Stage04 씬 생성 완료: {Stage04ScenePath}");
