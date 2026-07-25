@@ -14,6 +14,12 @@ public class StageIntroUI : MonoBehaviour
 
     public void Show(StageDefinition stage)
     {
+        if (stage == null)
+        {
+            Debug.LogWarning("[StageIntro] StageDefinition이 null입니다.");
+            return;
+        }
+
         gameObject.SetActive(true);
 
         if (titleText != null) titleText.text = stage.titleEn;
@@ -38,6 +44,7 @@ public class StageIntroUI : MonoBehaviour
     // TODO: 실제 스테이지 게임플레이 로딩 -- Docs/Stages 설계 문서 구현 단계에서 연결.
     public void OnStartPressed()
     {
-        Debug.Log($"[StageIntro] 스테이지 로딩 미구현 (설계 단계) -- 선택됨: {titleText.text}");
+        string selected = titleText != null ? titleText.text : "(제목 미연결)";
+        Debug.Log($"[StageIntro] 스테이지 로딩 미구현 (설계 단계) -- 선택됨: {selected}");
     }
 }

@@ -17,6 +17,11 @@ public class WorldMapUI : MonoBehaviour
             Debug.LogWarning($"[WorldMap] 잘못된 스테이지 인덱스: {index}");
             return;
         }
+        if (stageIntro == null)
+        {
+            Debug.LogWarning("[WorldMap] stageIntro가 연결되어 있지 않습니다.");
+            return;
+        }
 
         if (mapPanel != null) mapPanel.SetActive(false);
         stageIntro.Show(catalog.stages[index]);
