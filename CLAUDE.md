@@ -36,8 +36,18 @@ Scene/prefab assembly (NetworkManager + UnityTransport + NetworkBootstrapper, th
 
 - Hand-editing a `.unity`/`.prefab` YAML file directly is much riskier than it looks — a single missing trailing space once silently broke `TagManager.asset`'s parser. Building objects through Unity's own `AddComponent`/`PrefabUtility` API is the safe alternative to both hand-editing scene YAML and requiring a human to click through the Inspector.
 - Because these are just static C# methods, they're also invokable headlessly via `-executeMethod`, so scene assembly doesn't strictly require a human driving the Editor GUI at all.
-- The connect-button UI deliberately uses legacy `UnityEngine.UI.Text` + the built-in `LegacyRuntime.ttf` font, not TextMeshPro — TMP needs its Essentials resources imported first or new text renders with no font assigned, and that failure mode can't be caught by a headless compile check.
+- The connect-button UI deliberately uses legacy `UnityEngine.UI.Text`, not TextMeshPro — TMP needs its Essentials resources imported first or new text renders with no font assigned, and that failure mode can't be caught by a headless compile check. Legacy `Text` still accepts a custom TrueType `Font` asset directly (it's not a TMP-only feature), so the real UI Style Guide fonts (below) are applied without needing TMP at all.
+- `Tools/Coop Setup/5. Create/Update Connect UI` is **idempotent-update**, not create-or-skip like the other numbered steps — re-running it re-applies the current theme (colors/fonts/button shape) to the existing `ConnectCanvas` instead of warning and doing nothing. Run it again any time `UITheme.cs` tokens change.
 - NGO 2.x's `NetworkManager` inspector no longer shows the old Start Host/Server/Client buttons in Play Mode (present in 1.x); `Tools/Coop Setup/Debug: Start Host` (Play-mode-only, gated by a validate function) replaces it by calling `NetworkManager.Singleton.StartHost()` directly.
+
+### UI Style Guide implementation
+
+The tokens in "UI Style Guide" (below) aren't just documentation — they're wired into the actual scene:
+
+- **`Assets/Scripts/UI/UITheme.cs`** — the single source of truth for the style guide's colors/font paths as C# constants (`ColorPrimary`, `ColorFg`, `FontHeadingPath`, etc.). Both `NetworkSetupMenu.cs` and any gameplay script (e.g. `CreateCoopTest`'s button/goal-zone colors) reference these instead of hardcoding hex values.
+- **`Assets/Fonts/`** — the actual `Dosis-ExtraBold.ttf` (instanced from Google's variable-font source at `wght=800` via `fontTools.varLib.instancer`, since Dosis only ships as a variable font upstream) and `MPLUS1p-Bold.ttf`/`MPLUS1p-Medium.ttf`, pulled directly from `google/fonts` on GitHub, with their `OFL.txt` licenses alongside. Dosis has **no Hangul glyphs** — it's used only for the Latin title/logo (`TitleLabel`, "FILER PARK"); any Korean-facing label (the connect button, future dialogs) must use M PLUS 1p instead, which covers Hangul.
+- **`NetworkSetupMenu.GetOrCreatePlayerCharacterSprite()`** — procedurally draws the player sprite (a filled circle in white, an outline ring in `UITheme.ColorFg`, two simple round eyes with a highlight dot) instead of using a flat placeholder square. White fill is deliberate: `PlayerColorNGO` tints the whole sprite by multiplying `SpriteRenderer.color`, and white pixels are the only ones that take on the per-player color cleanly — the dark outline/eyes stay legible under any tint because multiplying by near-black stays near-black.
+- **`NetworkSetupMenu.GetOrCreateRoundedRectSprite()`** — bakes a 9-sliceable rounded-rect PNG (rounded-box SDF, correct `spriteBorder` for the corner radius) for button backgrounds, used instead of Unity's built-in `UI/Skin/UISprite.psd` so the corner radius/border thickness/border color actually match the style guide rather than Unity's default skin.
 
 ## Unity 6 migration notes
 

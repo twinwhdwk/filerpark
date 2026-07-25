@@ -80,11 +80,13 @@ public static class NetworkSetupMenu
     [MenuItem("Tools/Coop Setup/2. Create Player Prefab")]
     public static void CreatePlayerPrefab()
     {
+        EnsureSceneOpen();
+
         const string prefabFolder = "Assets/Prefabs";
         const string prefabPath = prefabFolder + "/Player.prefab";
         EnsureFolder(prefabFolder);
 
-        Sprite placeholderSprite = GetOrCreatePlaceholderSprite();
+        Sprite characterSprite = GetOrCreatePlayerCharacterSprite();
 
         GameObject go = new GameObject("Player");
         go.tag = "Player";
@@ -95,7 +97,7 @@ public static class NetworkSetupMenu
         }
 
         SpriteRenderer spriteRenderer = go.AddComponent<SpriteRenderer>();
-        spriteRenderer.sprite = placeholderSprite;
+        spriteRenderer.sprite = characterSprite;
 
         Rigidbody2D rb = go.AddComponent<Rigidbody2D>();
         rb.freezeRotation = true;
@@ -146,6 +148,7 @@ public static class NetworkSetupMenu
 
         EditorUtility.SetDirty(prefabAsset);
         AssetDatabase.SaveAssets();
+        EditorSceneManager.SaveOpenScenes();
         Selection.activeObject = prefabAsset;
 
         Debug.Log($"Player 프리팹 생성 완료: {prefabPath}. NetworkManager의 Player Prefab 슬롯에 자동 연결을 시도했습니다 -- Inspector에서 실제로 채워졌는지 꼭 확인해주세요.");
@@ -216,17 +219,18 @@ public static class NetworkSetupMenu
     }
 
     // 실제 빌드에서는 Editor의 Tools 메뉴가 존재하지 않으므로, StartClient()를 부를
-    // 진짜 UI 버튼이 필요하다. TextMeshPro는 "Import TMP Essentials"를 거치지 않으면
-    // 폰트가 비어 깨질 수 있어(에디터 GUI로 직접 확인 못 하는 상황이라 위험), 항상
-    // 존재하는 레거시 UI.Text + 내장 폰트(LegacyRuntime.ttf)로 만든다.
-    [MenuItem("Tools/Coop Setup/5. Create Connect UI")]
+    // 진짜 UI 버튼이 필요하다. 예전에는 TMP Essentials 임포트 문제 때문에 레거시
+    // UI.Text + 내장 폰트로만 만들었는데, 레거시 Text도 커스텀 TrueType 폰트를 직접
+    // 받을 수 있어(TMP 전용 기능이 아님) UI Style Guide의 실제 폰트(Dosis/M PLUS 1p)를
+    // TMP 없이도 적용할 수 있다.
+    //
+    // CreateNetworkManager 등과 달리 "이미 있으면 스킵"이 아니라 "이미 있으면 다시
+    // 칠한다" -- 테마 토큰이 바뀔 때마다 이 메뉴를 다시 실행해서 기존 씬에 반영하는
+    // 용도이기 때문에 idempotent update로 동작해야 한다.
+    [MenuItem("Tools/Coop Setup/5. Create/Update Connect UI")]
     public static void CreateConnectUI()
     {
-        if (GameObject.Find("ConnectCanvas") != null)
-        {
-            Debug.LogWarning("ConnectCanvas가 이미 씬에 있어서 새로 만들지 않았습니다.");
-            return;
-        }
+        EnsureSceneOpen();
 
         if (Object.FindFirstObjectByType<EventSystem>() == null)
         {
@@ -236,43 +240,104 @@ public static class NetworkSetupMenu
             Undo.RegisterCreatedObjectUndo(eventSystemObj, "Create EventSystem");
         }
 
-        GameObject canvasObj = new GameObject("ConnectCanvas");
-        Canvas canvas = canvasObj.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1920f, 1080f);
-        canvasObj.AddComponent<GraphicRaycaster>();
+        GameObject canvasObj = GameObject.Find("ConnectCanvas");
+        bool isNewCanvas = canvasObj == null;
+        if (isNewCanvas)
+        {
+            canvasObj = new GameObject("ConnectCanvas");
+            Canvas canvas = canvasObj.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            canvasObj.AddComponent<GraphicRaycaster>();
+            Undo.RegisterCreatedObjectUndo(canvasObj, "Create Connect UI");
+        }
 
-        GameObject buttonObj = new GameObject("ConnectButton");
-        buttonObj.transform.SetParent(canvasObj.transform, false);
-        RectTransform buttonRect = buttonObj.AddComponent<RectTransform>();
-        buttonRect.sizeDelta = new Vector2(280f, 80f);
+        // 배경 패널: color-bg-secondary로 화면을 덮어서, 게임 월드가 그대로 비치는
+        // 미완성처럼 보이지 않는 제대로 된 시작 화면으로 만든다. sibling index 0으로
+        // 고정해 항상 다른 UI 뒤에 깔리게 한다.
+        GameObject backgroundObj = FindChild(canvasObj.transform, "BackgroundPanel");
+        if (backgroundObj == null)
+        {
+            backgroundObj = new GameObject("BackgroundPanel");
+            backgroundObj.transform.SetParent(canvasObj.transform, false);
+        }
+        RectTransform backgroundRect = GetOrAddComponent<RectTransform>(backgroundObj);
+        backgroundRect.anchorMin = Vector2.zero;
+        backgroundRect.anchorMax = Vector2.one;
+        backgroundRect.offsetMin = Vector2.zero;
+        backgroundRect.offsetMax = Vector2.zero;
+        Image backgroundImage = GetOrAddComponent<Image>(backgroundObj);
+        backgroundImage.sprite = GetOrCreatePlaceholderSprite();
+        backgroundImage.color = UITheme.ColorBgSecondary;
+        backgroundObj.transform.SetSiblingIndex(0);
+
+        // 타이틀: Dosis(라틴 전용) + 대문자 + primary 색 -- 로고/제목 자리. 한글은
+        // Dosis에 글리프가 없어서 렌더가 깨지므로, 제목은 영문 워드마크로 둔다.
+        GameObject titleObj = FindChild(canvasObj.transform, "TitleLabel");
+        if (titleObj == null)
+        {
+            titleObj = new GameObject("TitleLabel");
+            titleObj.transform.SetParent(canvasObj.transform, false);
+        }
+        RectTransform titleRect = GetOrAddComponent<RectTransform>(titleObj);
+        titleRect.anchorMin = new Vector2(0.5f, 0.5f);
+        titleRect.anchorMax = new Vector2(0.5f, 0.5f);
+        titleRect.sizeDelta = new Vector2(900f, 160f);
+        titleRect.anchoredPosition = new Vector2(0f, 160f);
+        Text titleText = GetOrAddComponent<Text>(titleObj);
+        titleText.text = "FILER PARK";
+        titleText.font = AssetDatabase.LoadAssetAtPath<Font>(UITheme.FontHeadingPath);
+        titleText.fontSize = 96;
+        titleText.fontStyle = FontStyle.Bold;
+        titleText.alignment = TextAnchor.MiddleCenter;
+        titleText.color = UITheme.ColorPrimary;
+        titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+        // 버튼: 라운드 사각형 + 3px 테두리 절차적 스프라이트(GetOrCreateRoundedRectSprite),
+        // 라벨은 한글을 지원하는 M PLUS 1p Bold.
+        GameObject buttonObj = FindChild(canvasObj.transform, "ConnectButton");
+        if (buttonObj == null)
+        {
+            buttonObj = new GameObject("ConnectButton");
+            buttonObj.transform.SetParent(canvasObj.transform, false);
+        }
+        RectTransform buttonRect = GetOrAddComponent<RectTransform>(buttonObj);
+        buttonRect.sizeDelta = new Vector2(320f, 90f);
         buttonRect.anchorMin = new Vector2(0.5f, 0.5f);
         buttonRect.anchorMax = new Vector2(0.5f, 0.5f);
         buttonRect.anchoredPosition = Vector2.zero;
 
-        Image buttonImage = buttonObj.AddComponent<Image>();
-        buttonImage.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        Image buttonImage = GetOrAddComponent<Image>(buttonObj);
+        buttonImage.sprite = GetOrCreateRoundedRectSprite(
+            "Assets/Sprites/UI_ButtonPrimary.png",
+            UITheme.ColorPrimary,
+            UITheme.ColorWhite);
         buttonImage.type = Image.Type.Sliced;
-        buttonImage.color = new Color(0.2f, 0.6f, 0.95f);
 
-        Button button = buttonObj.AddComponent<Button>();
+        Button button = GetOrAddComponent<Button>(buttonObj);
         button.targetGraphic = buttonImage;
+        // 다시 실행해도 리스너가 중복으로 쌓이지 않도록 매번 새로 만든다.
+        button.onClick = new Button.ButtonClickedEvent();
 
-        GameObject textObj = new GameObject("Label");
-        textObj.transform.SetParent(buttonObj.transform, false);
-        RectTransform textRect = textObj.AddComponent<RectTransform>();
+        GameObject textObj = FindChild(buttonObj.transform, "Label");
+        if (textObj == null)
+        {
+            textObj = new GameObject("Label");
+            textObj.transform.SetParent(buttonObj.transform, false);
+        }
+        RectTransform textRect = GetOrAddComponent<RectTransform>(textObj);
         textRect.anchorMin = Vector2.zero;
         textRect.anchorMax = Vector2.one;
         textRect.sizeDelta = Vector2.zero;
 
-        Text label = textObj.AddComponent<Text>();
+        Text label = GetOrAddComponent<Text>(textObj);
         label.text = "서버 접속";
-        label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        label.fontSize = 28;
+        label.font = AssetDatabase.LoadAssetAtPath<Font>(UITheme.FontBodyBoldPath);
+        label.fontSize = 32;
         label.alignment = TextAnchor.MiddleCenter;
-        label.color = Color.white;
+        label.color = UITheme.ColorWhite;
 
         GameObject networkManagerObj = GameObject.Find("NetworkManager");
         NetworkBootstrapper bootstrapper = networkManagerObj != null
@@ -290,17 +355,24 @@ public static class NetworkSetupMenu
             Debug.LogWarning("NetworkManager를 못 찾아서 버튼 OnClick을 자동 연결하지 못했습니다. 먼저 '1. Create NetworkManager'를 실행하세요.");
         }
 
-        Undo.RegisterCreatedObjectUndo(canvasObj, "Create Connect UI");
         Selection.activeGameObject = canvasObj;
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        EditorSceneManager.SaveOpenScenes();
 
-        Debug.Log("ConnectCanvas 생성 완료 -- 버튼 클릭 시 NetworkBootstrapper.ConnectToServer() 호출되도록 연결됨. Ctrl+S로 저장하세요.");
+        Debug.Log("ConnectCanvas 생성/갱신 완료 -- UI Style Guide 색/폰트 적용, 버튼 클릭 시 NetworkBootstrapper.ConnectToServer() 호출.");
     }
 
-    // CLAUDE.md UI Style Guide 색상 토큰 (PICO PARK 2 bundle.css 기반). 새 UI/기믹
-    // 색상을 추가할 때는 여기 토큰을 재사용하고, 임의 색을 새로 만들지 않는다.
-    private static readonly Color ColorPrimary = new Color(0.282f, 0.678f, 0.082f);       // #48ad15
-    private static readonly Color ColorBgSecondary = new Color(0.914f, 0.984f, 0.875f);   // #e9fbdf
+    private static GameObject FindChild(Transform parent, string name)
+    {
+        Transform child = parent.Find(name);
+        return child != null ? child.gameObject : null;
+    }
+
+    private static T GetOrAddComponent<T>(GameObject go) where T : Component
+    {
+        T component = go.GetComponent<T>();
+        return component != null ? component : go.AddComponent<T>();
+    }
 
     private const string ScenePath = "Assets/scense/main.unity";
 
@@ -337,7 +409,7 @@ public static class NetworkSetupMenu
         button.transform.position = new Vector3(2f, -2.2f, 0f);
         SpriteRenderer buttonSprite = button.AddComponent<SpriteRenderer>();
         buttonSprite.sprite = sprite;
-        buttonSprite.color = ColorPrimary;
+        buttonSprite.color = UITheme.ColorPrimary;
         button.transform.localScale = new Vector3(0.6f, 0.2f, 1f);
         BoxCollider2D buttonCollider = button.AddComponent<BoxCollider2D>();
         buttonCollider.isTrigger = true;
@@ -366,7 +438,7 @@ public static class NetworkSetupMenu
         goalZone.transform.position = new Vector3(0f, -2.2f, 0f);
         SpriteRenderer goalSprite = goalZone.AddComponent<SpriteRenderer>();
         goalSprite.sprite = sprite;
-        goalSprite.color = new Color(ColorBgSecondary.r, ColorBgSecondary.g, ColorBgSecondary.b, 0.4f);
+        goalSprite.color = new Color(UITheme.ColorBgSecondary.r, UITheme.ColorBgSecondary.g, UITheme.ColorBgSecondary.b, 0.4f);
         goalZone.transform.localScale = new Vector3(7f, 1.5f, 1f);
         BoxCollider2D goalCollider = goalZone.AddComponent<BoxCollider2D>();
         goalCollider.isTrigger = true;
@@ -474,6 +546,170 @@ public static class NetworkSetupMenu
 
         Debug.Log($"봇 클라이언트 {count}개를 실행했습니다 (127.0.0.1:7777로 접속 시도). " +
             "Editor에서 Play 모드로 들어가 'Debug: Start Host'를 먼저 눌러야 접속에 성공합니다.");
+    }
+
+    // 라운드 사각형 + 테두리 UI 스프라이트를 절차적으로 만든다 (SDF 기반 rounded-box
+    // 거리함수 -- Inigo Quilez의 공식). 9-slice로 늘어나도 모서리가 안 뭉개지도록
+    // spriteBorder를 radius+border만큼 잡아준다. UI Style Guide의 "배지/스티커"
+    // 버튼 모양(라운드 6px급, 굵은 테두리)을 표현하는 용도.
+    private static Sprite GetOrCreateRoundedRectSprite(string path, Color fillColor, Color borderColor)
+    {
+        Sprite existing = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+        if (existing != null)
+        {
+            return existing;
+        }
+
+        EnsureFolder(Path.GetDirectoryName(path).Replace("\\", "/"));
+
+        const int size = 128;
+        const float radius = 28f;
+        const float borderThickness = 10f;
+
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        Color[] pixels = new Color[size * size];
+        Vector2 center = new Vector2(size / 2f, size / 2f);
+        Vector2 innerHalfSize = center - new Vector2(radius, radius);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                Vector2 p = new Vector2(x + 0.5f, y + 0.5f) - center;
+                Vector2 q = new Vector2(Mathf.Abs(p.x), Mathf.Abs(p.y)) - innerHalfSize;
+                float outsideDist = new Vector2(Mathf.Max(q.x, 0f), Mathf.Max(q.y, 0f)).magnitude;
+                float insideDist = Mathf.Min(Mathf.Max(q.x, q.y), 0f);
+                float d = outsideDist + insideDist - radius;
+
+                float outerAlpha = Mathf.Clamp01(0.5f - d);
+                // borderT: d가 -borderThickness보다 바깥쪽(테두리 쪽)이면 1(테두리색),
+                // 안쪽으로 더 들어가면 0(채움색) -- outerAlpha와 부호가 반대라 따로 계산.
+                float borderT = Mathf.Clamp01(0.5f + (d + borderThickness));
+                Color color = Color.Lerp(fillColor, borderColor, borderT);
+                color.a = outerAlpha;
+
+                pixels[y * size + x] = color;
+            }
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply();
+
+        byte[] png = texture.EncodeToPNG();
+        Object.DestroyImmediate(texture);
+        File.WriteAllBytes(path, png);
+        AssetDatabase.ImportAsset(path);
+
+        TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+        if (importer != null)
+        {
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spritePixelsPerUnit = 100;
+            importer.filterMode = FilterMode.Bilinear;
+            importer.alphaIsTransparency = true;
+            float border = radius + borderThickness;
+            importer.spriteBorder = new Vector4(border, border, border, border);
+            importer.SaveAndReimport();
+        }
+
+        return AssetDatabase.LoadAssetAtPath<Sprite>(path);
+    }
+
+    private static readonly int[] EyeSides = { -1, 1 };
+
+    // UI Style Guide의 "둥글고 단순한 블롭 + 굵은 외곽선 + 단순한 점 눈" 아트 스타일을
+    // 그대로 따르는 플레이어 캐릭터 스프라이트. 몸통은 흰색으로 그려서
+    // PlayerColorNGO의 색 곱연산(tint)이 그대로 먹히게 하고, 외곽선/눈은 거의 검정으로
+    // 그려서 어떤 플레이어 색이 곱해져도(검정*무엇이든=검정에 가까움) 항상 또렷하게
+    // 남도록 한다.
+    private static Sprite GetOrCreatePlayerCharacterSprite()
+    {
+        const string path = "Assets/Sprites/PlayerCharacter.png";
+
+        Sprite existing = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+        if (existing != null)
+        {
+            return existing;
+        }
+
+        EnsureFolder("Assets/Sprites");
+
+        const int size = 64;
+        const float bodyRadius = size * 0.40f;
+        const float outlineThickness = size * 0.05f;
+        const float eyeRadius = size * 0.075f;
+        const float eyeOffsetX = size * 0.16f;
+        const float eyeOffsetY = size * 0.10f;
+        const float highlightRadius = size * 0.022f;
+
+        Color outlineColor = UITheme.ColorFg;
+        Color eyeColor = UITheme.ColorFg;
+        Color highlightColor = Color.white;
+
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        Color[] pixels = new Color[size * size];
+        Vector2 center = new Vector2(size / 2f, size / 2f);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                Vector2 p = new Vector2(x + 0.5f, y + 0.5f);
+                float distFromCenter = Vector2.Distance(p, center);
+                float bodyAlpha = Mathf.Clamp01(0.5f - (distFromCenter - bodyRadius));
+
+                Color pixelColor = Color.clear;
+                if (bodyAlpha > 0f)
+                {
+                    bool isOutlineBand = distFromCenter > bodyRadius - outlineThickness;
+                    Color fill = isOutlineBand ? outlineColor : Color.white;
+                    pixelColor = new Color(fill.r, fill.g, fill.b, bodyAlpha);
+                }
+
+                foreach (int side in EyeSides)
+                {
+                    Vector2 eyeCenter = center + new Vector2(side * eyeOffsetX, eyeOffsetY);
+                    float eyeDist = Vector2.Distance(p, eyeCenter);
+                    float eyeAlpha = Mathf.Clamp01(0.5f - (eyeDist - eyeRadius));
+                    if (eyeAlpha > 0f)
+                    {
+                        pixelColor = Color.Lerp(pixelColor, eyeColor, eyeAlpha);
+                        pixelColor.a = Mathf.Max(pixelColor.a, eyeAlpha);
+                    }
+
+                    Vector2 highlightCenter = eyeCenter + new Vector2(-eyeRadius * 0.35f, eyeRadius * 0.35f);
+                    float highlightDist = Vector2.Distance(p, highlightCenter);
+                    float highlightAlpha = Mathf.Clamp01(0.5f - (highlightDist - highlightRadius));
+                    if (highlightAlpha > 0f)
+                    {
+                        pixelColor = Color.Lerp(pixelColor, highlightColor, highlightAlpha);
+                        pixelColor.a = Mathf.Max(pixelColor.a, highlightAlpha);
+                    }
+                }
+
+                pixels[y * size + x] = pixelColor;
+            }
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply();
+
+        byte[] png = texture.EncodeToPNG();
+        Object.DestroyImmediate(texture);
+        File.WriteAllBytes(path, png);
+        AssetDatabase.ImportAsset(path);
+
+        TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+        if (importer != null)
+        {
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spritePixelsPerUnit = 64;
+            importer.filterMode = FilterMode.Bilinear;
+            importer.alphaIsTransparency = true;
+            importer.SaveAndReimport();
+        }
+
+        return AssetDatabase.LoadAssetAtPath<Sprite>(path);
     }
 
     private static Sprite GetOrCreatePlaceholderSprite()

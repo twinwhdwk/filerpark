@@ -48,6 +48,7 @@ GameObject:
   - component: {fileID: 2275650426214143705}
   - component: {fileID: 6708032711124928053}
   - component: {fileID: 8215585556736334862}
+  - component: {fileID: 5841204675865388984}
   m_Layer: 6
   m_Name: Player
   m_TagString: Player
@@ -120,12 +121,12 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 3536530938591342608, guid: 08fc8c66f6b28a04eadcd62d49b209a2, type: 3}
+  m_Sprite: {fileID: 663144637380208133, guid: 966bba228b11b5841bd81ad6b561cc82, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 1, y: 1}
+  m_Size: {x: 0.84375, y: 0.84375}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -196,8 +197,8 @@ BoxCollider2D:
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 1, y: 1}
-    newSize: {x: 1, y: 1}
+    oldSize: {x: 0.84375, y: 0.84375}
+    newSize: {x: 0.84375, y: 0.84375}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
     adaptiveTiling: 0
@@ -223,7 +224,7 @@ MonoBehaviour:
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
   ActiveSceneSynchronization: 0
-  SceneMigrationSynchronization: 1
+  SceneMigrationSynchronization: 0
   SpawnWithObservers: 1
   DontDestroyWithOwner: 0
   AutoObjectParentSync: 1
@@ -321,3 +322,21 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerColorNGO
   ShowTopMostFoldoutHeaderGroup: 1
+--- !u!114 &5841204675865388984
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7576499036739308593}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3dc270b1d112e144ebb20a26152e1036, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BotController
+  ShowTopMostFoldoutHeaderGroup: 1
+  mode: 0
+  patrolHalfWidth: 3
+  followDistance: 1.5
+  jumpIntervalMin: 1.5
+  jumpIntervalMax: 4
