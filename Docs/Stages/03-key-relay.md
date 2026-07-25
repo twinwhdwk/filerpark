@@ -1,78 +1,70 @@
 # Stage 3 — 열쇠 릴레이 (Key Relay)
 
-**테마**: 운반 & 균형 · **인원**: 4~6명 · **구현 상태**: 신규 컴포넌트 필요 — `CarryableKeyNGO`, `SeesawPlatformNGO`.
+**테마**: 운반 & 균형 · **인원**: 4~6명 · **구현 상태**: 구현 완료 (`Assets/Scenes/Stages/Stage03_KeyRelay.unity`), Stage 1-2보다 봇 검증이 덜 됨 (아래 참고).
 
-## 개요
+## 개요 (원안과 실제 구현의 차이)
 
-공유 열쇠 하나가 있어야 문을 열 수 있는데, 열쇠를 든 사람은 건널 수 없는 좁은 틈이 중간에 있다. 열쇠 없는 사람이 먼저 틈을 건너간 뒤, 열쇠 든 사람이 틈 앞에서 열쇠를 놓으면(또는 던지면) 건너간 사람이 주워서 마저 운반한다. 그 다음 구간은 양쪽 무게가 맞아야 기울지 않는 시소 다리 — 인원을 양쪽에 적절히 나눠 서야 통과할 수 있다.
+원안은 "틈을 못 건너는 캐리어가 열쇠를 던지면 반대편 사람이 이어받는 다단계 릴레이"였다. 실제 구현은 **"틈/이동속도 페널티 없이, 순위 0번 봇이 열쇠를 처음부터 문까지 직접 운반"**으로 단순화됐다 — `bot-coordination.md`가 처음부터 "이 스테이지가 4개 중 자동화 신뢰도가 가장 낮다"고 명시했던 정밀 핸드오프 타이밍 문제를 아예 피한 것이다. "공유 자원(열쇠)을 가진 사람만 문을 열 수 있다"는 핵심과 "시소로 무게 균형 맞추기"는 원안 그대로 유지했다.
 
-## 신규 컴포넌트
+## 구현된 컴포넌트
 
 ### `CarryableKeyNGO`
 ```csharp
 public class CarryableKeyNGO : NetworkBehaviour
 {
-    private readonly NetworkVariable<ulong> carrierClientId = new(...WritePermission.Server); // 0 = 아무도 안 듦(NGO의 서버 clientId 0과 겹치지 않게 별도 sentinel 필요 -- ulong.MaxValue 등)
-    // 서버가 검증하는 ServerRpc: 플레이어가 열쇠 트리거 반경 안에 있을 때만 Pickup 허용
-    [ServerRpc(RequireOwnership = false)] public void RequestPickupServerRpc(ServerRpcParams p) { ... }
-    [ServerRpc(RequireOwnership = false)] public void RequestDropServerRpc(ServerRpcParams p) { ... }
-    // 들고 있는 동안 FixedUpdate에서 캐리어의 손 위치로 transform을 따라가게 함 (서버 계산, NetworkTransform으로 전파)
+    private const ulong NoCarrier = ulong.MaxValue; // sentinel -- clientId 0과 안 겹침
+    public float pickupRadius = 1f;
+    public Vector3 carryOffset = new(0f, 0.9f, 0f);
+
+    public readonly NetworkVariable<ulong> carrierClientId = new(NoCarrier, ...WritePermission.Server);
+
+    [ServerRpc(RequireOwnership = false)] public void RequestPickupServerRpc(ServerRpcParams p = default) { ... } // 거리 검증
+    [ServerRpc(RequireOwnership = false)] public void RequestDropServerRpc(ServerRpcParams p = default) { ... }
+
+    // FixedUpdate: 캐리어가 접속 해제되면(ConnectedClients에 없으면) carrierClientId를
+    // 자동으로 NoCarrier로 되돌린다 -- 원안에 없던, 실제로 필요했던 방어 코드.
 }
 ```
-`CoopDoorNGO`는 `requiredButtons` 대신(또는 추가로) "carrierClientId가 유효하고 문 앞 트리거 안에 있는가"를 여는 조건에 추가하는 변형이 필요 — 기존 door 스크립트를 상속/확장하거나 별도 `KeyDoorNGO`로 분리.
+원안과 달리 **이동속도/점프력 페널티가 없다** — 열쇠를 들어도 평소처럼 움직인다.
 
-### `SeesawPlatformNGO`
-```csharp
-public class SeesawPlatformNGO : NetworkBehaviour
-{
-    public Transform leftSide, rightSide;
-    public float tiltThreshold = 1.5f; // 이 차이 이상 인원 불균형이면 기울어짐
+### `KeyDoorNGO`
+`CoopDoorNGO`(버튼 개수 기반)와 별도 스크립트로 분리했다 — "열쇠가 문 앞 범위(`openRange`) 안에 있는가"만으로 매 프레임 `isOpen`을 재계산하는 상태 비저장(stateless) 방식이라, 카운터 드리프트 걱정이 없다. `CoopDoorNGO`와 동일하게 `UITheme.ColorIce` + tintable 스프라이트를 쓴다.
 
-    // 서버: leftSide/rightSide 트리거 안 Player 콜라이더 수를 세고,
-    // 차이가 임계값을 넘으면 플랫폼 Rigidbody2D를 회전시켜 무거운 쪽이 내려가게 함.
-    // 차이가 임계값 이하면 수평 유지 -> 건널 수 있음.
-}
-```
+### `SeesawPlatformNGO` (+ `SeesawSideZone`)
+원안대로 구현됨: 좌/우 자식 오브젝트(`SeesawSideZone`)가 각자 겹친 Player 콜라이더 수를 부모에 보고하고, 차이가 `tiltThreshold`를 넘으면 `transform.rotation`을 `tiltAngle`까지 서서히 회전시킨다. 자식으로 분리한 이유: 부모 하나에 트리거 콜라이더 두 개를 붙이면 `OnTrigger` 콜백에서 어느 쪽이 반응했는지 구분할 수 없기 때문.
 
 ## 인원수 스케일링
 
-- 열쇠 릴레이 구간의 "틈" 폭은 고정(인원수와 무관) — 이 구간은 순서/타이밍 문제라 인원이 늘어도 난이도가 크게 안 변함.
-- 시소는 인원이 많을수록 왼쪽/오른쪽 배분 조합이 다양해져 자연히 쉬워지므로, `tiltThreshold`를 `Mathf.Max(1f, 접속 인원수 * 0.3f)`처럼 인원수에 비례해 살짝 낮춰 상대적 난이도를 유지한다(인원이 많다고 너무 쉬워지지 않게).
+원안의 "틈 폭 고정" 항목은 틈 자체가 없어져 해당 없음. 시소는 원안대로 인원이 많을수록 배분 조합이 다양해져 자연히 쉬워진다.
 
-## 레벨 레이아웃 (개념도)
+## 레벨 레이아웃 (실제 좌표)
 
 ```
-[스폰]  [열쇠]   [틈]   [문(열쇠 필요)]   [시소 다리]   [골존]
-          │        └ 열쇠 든 채로는
-          │          점프 실패하도록
-          │          이동속도 페널티
-          └ 최초 위치, 아무나 주울 수 있음
+[스폰 -6~6]  [열쇠 x=0]  [문 x=7]  [시소 구간 9~15, 안전망 y=-7]  [골존 x=20]
 ```
 
-## 진행 흐름
+## 진행 흐름 (실제)
 
-1. 한 명이 열쇠를 줍는다 (`RequestPickupServerRpc`) — 든 상태에서는 이동속도/점프력 페널티(무거운 물건이라는 설정)로 틈을 못 건넘.
-2. 열쇠 없는 인원이 먼저 틈을 건넌다.
-3. 열쇠 든 사람이 틈 앞에서 `RequestDropServerRpc` — 반대편 사람이 주움.
-4. 열쇠 들고 문 앞으로 이동 -> 문 열림 -> 전원 통과.
-5. 시소 다리에서 인원을 양쪽에 나눠 서서 수평 유지하며 건넘.
-6. 골존 도달.
+1. 순위 0번 봇(또는 가장 먼저 반응한 사람)이 열쇠를 줍는다.
+2. 열쇠를 든 채로 문까지 직접 이동 (페널티 없음).
+3. 문 앞 범위 안에 열쇠가 들어오면 `isOpen`이 자동으로 true.
+4. 시소 구간에서 나머지 인원이 좌/우로 나뉘어 균형을 맞추며 통과.
+5. 전원 골존 도달.
 
 ## 승리/실패 조건
 
 - 성공: 전원 골존 도달.
-- 실패 조건 없음. 단, 열쇠를 떨어뜨릴 수 없는 위치(틈 사이)에 갇히는 소프트 락 가능성이 있어 — 열쇠에 "일정 시간 방치되면 자동으로 가장 가까운 안전지대로 리셋" 안전장치를 넣는 걸 권장 (설계상 필요, 구현 시 반영).
+- 실패 조건 없음. 시소 아래 안전망(y=-7)으로 소프트락은 방지했지만, 완전한 복귀 경로는 사람 플레이테스트로 확인이 더 필요한 영역으로 남아있다.
+
+## 알려진 이슈 (실측)
+
+열쇠 픽업 판정에서 클라이언트/서버 위치 동기화 지연이 실제로 문제가 됐다 — 캐리어 봇이 로컬에서 계산한 "충분히 가까움"(`pickupRadius * 0.8`) 판정은 통과하는데, `NetworkTransform` 보간으로 인해 실제로는 서버가 보는 위치가 약 0.2유닛 더 멀어서 서버의 `pickupRadius` 검증이 계속 거부하는 상황이 있었다(진단 로그로 `dist=1.19`가 반복 거부되는 걸 확인). `pickupRadius`를 늘려서 이 동기화 오차를 흡수하도록 조정해 해결했다.
 
 ## 봇 자동 클리어 로직
 
-공통 아키텍처: [bot-coordination.md](bot-coordination.md). 이 스테이지가 4개 중 **자동화 신뢰도가 가장 낮다** — 아래 배정표는 "이상적인 경우"이고, 실질적으로는 사람 검증 비중이 크다.
+공통 아키텍처는 [bot-coordination.md](bot-coordination.md)를 원안으로 제안했으나, Stage 2와 마찬가지로 **서버 방송형 역할 배정 대신 `BotController.BotMode.StageAuto`의 로컬 자기판별**로 구현됐다.
 
-| 역할 번호 | BotMode | 대상 | 인원 |
-|---|---|---|---|
-| 0 | `CarryRelay` (구간 A: 스폰 -> 틈 앞) | `KeyPickup` -> `KeyHandoff-A` | 1명 |
-| 1 | `CarryRelay` (구간 B: 틈 건너편 -> 문) | `KeyHandoff-A` -> `KeyHandoff-B`(문 앞) | 1명 |
-| 2 ~ N-1 | `HoldButton`류를 시소 좌/우 존에 응용 (`SeesawLeft`/`SeesawRight` 태그) | 좌우 인원 균형 맞춰 서기 | 나머지 |
-
-- `CarryRelay`는 정확한 좌표(웨이포인트)에서 pickup/drop 타이밍이 맞아야 하는데, 봇의 이동은 `PlayerMovementNGO`의 물리 기반이라 정지 위치에 프레임 단위 오차가 있다 — **틈 폭에 여유(픽업/드롭 판정 반경을 넉넉하게)를 둬야 봇 릴레이가 실패하지 않는다.** 이건 봇 검증을 위한 타협이 아니라, 애초에 사람이 해도 프레임 퍼펙트를 요구하면 안 되는 디자인이라 방향은 같다.
-- 시소 좌우 배분은 `assignedRole`을 절반씩 `SeesawLeft`/`SeesawRight`로 고정 배정하면 되므로 이 부분은 자동 검증 신뢰도가 나쁘지 않음.
-- **사람 플레이테스트 필수 영역**: 열쇠 든 채 이동속도 페널티를 받는 상태에서 정확히 틈 앞까지 가서 드롭하는 전체 릴레이 시퀀스. 실패 시 소프트 락(열쇠가 아무도 못 줍는 곳에 떨어짐) 여부는 사람이 일부러 이상한 지점에서 드롭해보며 확인해야 한다.
+- `UpdateStageAuto()`가 씬에서 `CarryableKeyNGO`를 찾으면 `UpdateKeyRelay()`로 분기.
+- 순위 0번 봇만 열쇠를 운반(줍기 → 문으로 이동). 나머지는 문이 열리기 전까지 시소 좌/우(`myRank % 2`로 결정)에서 대기하다가, 문이 열리면 골로 이동.
+- 원안의 2단계 릴레이(`KeyPickup`/`KeyHandoff-A/B` 태그, 봇 2마리 이상 필요)는 구현되지 않았다 — 단일 운반자 방식이라 릴레이 자체가 없다.
+- **이 스테이지는 4개 중 봇 검증이 가장 덜 됐다** — Stage 1-2는 5봇 GCP 실서버 테스트로 반복 검증됐지만, Stage 3-4는 구현/배선까지만 완료되고 아직 end-to-end 봇 검증 기록이 없다(원 구현 커밋 메시지에 명시).

@@ -4,6 +4,8 @@
 
 기존 `BotController`(Patrol/FollowNearest)는 "그럴듯하게 돌아다니기"는 되지만 "이 버튼은 내가 맡을게" 같은 **역할 분담**이 없다. 이번 설계의 핵심은 그 역할 분담을 서버가 결정해서 각 봇에게 통보하는 것 — 봇끼리 합의(consensus)할 필요 없이, `CLAUDE.md`의 "Server-authoritative throughout" 원칙을 그대로 봇 AI에도 적용한다.
 
+> **실제 구현은 아래 원안과 다르다.** 스테이지 2~4를 실제로 만들 때는 서버가 `assignedRole` `NetworkVariable`을 방송하는 대신, `BotController.BotMode.StageAuto`가 **매 프레임 로컬에서** `Object.FindAnyObjectByType<T>()`로 현재 씬에 어떤 기믹 컴포넌트가 있는지 스스로 감지하고, 역할이 필요한 경우엔 `GetMyRank()`(접속한 Player를 `OwnerClientId` 오름차순 정렬한 자기 순번)로 결정론적으로 정한다. 결과(같은 봇이 매번 같은 역할을 맡는 재현성)는 원안과 동일하지만, `NetworkVariable`/RPC 방송이 필요 없고 태그(`StageButton`/`PushTargetZone`/`KeyPickup` 등)나 `StageBotDirectorNGO`, `BotIdentityNGO`도 만들지 않았다 — 실제 `BotMode` 목록과 로직은 `Assets/Scripts/Player/BotController.cs`를 직접 참고할 것. 아래 원안은 처음 설계할 때의 접근이자, 씬 이름/태그와 무관하게 스스로 판별하는 방식이 안 통할 만큼 스테이지가 복잡해지면 참고할 대안으로 남겨둔다.
+
 ## 1. 봇이 자기 자신을 서버에 알린다
 
 지금은 서버가 "이 클라이언트가 봇인지 사람인지" 알 방법이 없다 (`BotProcess.IsBot`은 그 프로세스 로컬에서만 보이는 값). 필요한 추가:
