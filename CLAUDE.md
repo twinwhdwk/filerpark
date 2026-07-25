@@ -4,17 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Pico Park-style 2D co-op puzzle platformer built in Unity, using Netcode for GameObjects (NGO) with a dedicated server hosted on GCP. There is no Unity Editor scene/prefab content committed yet — only C# scripts and `ProjectSettings`/`Packages` config. Scenes, prefabs (Player, Button, Door), and the `NetworkManager` GameObject still need to be assembled by hand in the Unity Editor before the project can run.
+A Pico Park-style 2D co-op puzzle platformer built in Unity, using Netcode for GameObjects (NGO) with a dedicated server hosted on GCP.
 
-- Unity: **2021.3.45f2** (`ProjectSettings/ProjectVersion.txt`)
-- Netcode: `com.unity.netcode.gameobjects` 1.9.1 + `com.unity.transport` 2.2.1 (`Packages/manifest.json`)
+- Unity: **6000.5.5f1** (`ProjectSettings/ProjectVersion.txt`) — migrated up from an original 2021.3.45f2 baseline; see the Unity 6 migration note below.
+- Netcode: `com.unity.netcode.gameobjects` 2.12.0 + `com.unity.transport` 2.6.0 (`Packages/manifest.json`)
+- The single scene is `Assets/scense/main.unity` (folder name is a typo for "Scenes", left as-is — renaming risks breaking asset GUID references for no real benefit). The Player prefab is `Assets/Prefabs/Player.prefab`.
 
 ## Commands
 
-There is no CLI build/test/lint pipeline in this repo — it's a Unity project, worked on primarily through the Unity Editor. There is no test suite.
+There is no CLI build/test/lint pipeline in the traditional sense — it's a Unity project — but scene assembly and compile verification are scripted rather than manual, via `Assets/Editor/NetworkSetupMenu.cs`. There is no automated test suite.
 
+- **Headless compile check** (run after any script/package/ProjectSettings change, before assuming it works): with the Editor fully closed (a second instance on the same project fails fast on the project lock),
+  ```
+  "C:\Program Files\Unity\Hub\Editor\6000.5.5f1\Editor\Unity.exe" -batchmode -nographics -quit -projectPath "C:\Users\twinw\Desktop\filerpark" -logFile "<path>.log"
+  ```
+  The launching process can return **before** Unity actually finishes (package resolution/compilation continues in a detached process) — poll `tasklist` for `Unity.exe` until it's actually gone, then check the log with `grep "error CS"` and confirm `Library/ScriptAssemblies/Assembly-CSharp.dll` exists/was rewritten. A `bee_backend.exe` build-daemon process can outlive Unity itself and hold file locks; `taskkill /F /IM bee_backend.exe` if a cleanup step gets "Device or resource busy".
+- **Scene assembly**: `Tools/Coop Setup/1-5` menu items (Editor GUI, or headless via `-executeMethod NetworkSetupMenu.<MethodName>`) build the NetworkManager, Player prefab, camera, test ground, and connect UI programmatically instead of by hand — see "Editor automation" below for why.
 - **Server build**: Unity Editor → `File > Build Settings` → platform `Dedicated Server`, Target OS `Linux` → produces a `.x86_64` binary.
-- **Client build**: same dialog, platform `Windows, Mac, Linux` (regular player build) → produces a `.exe`.
+- **Client build**: same dialog, platform `Windows, Mac, Linux` (regular player build) → produces a `.exe`. This build doubles as the bot-simulation executable (see below).
 - **Deploy to the dedicated server VM**:
   ```
   gcloud compute scp --recurse ServerBuild filerpark-game-server:~ --project=filerpark --zone=asia-northeast3-a
@@ -22,6 +29,24 @@ There is no CLI build/test/lint pipeline in this repo — it's a Unity project, 
   chmod +x <binary>.x86_64
   nohup ./<binary>.x86_64 -batchmode -nographics &
   ```
+
+## Editor automation (`Assets/Editor/NetworkSetupMenu.cs`)
+
+Scene/prefab assembly (NetworkManager + UnityTransport + NetworkBootstrapper, the Player prefab and all its components, camera setup, a test ground platform, and the connect-button UI) is done via scripted `[MenuItem]` methods under `Tools/Coop Setup`, not by hand-placing GameObjects in the Inspector. Two reasons this matters:
+
+- Hand-editing a `.unity`/`.prefab` YAML file directly is much riskier than it looks — a single missing trailing space once silently broke `TagManager.asset`'s parser. Building objects through Unity's own `AddComponent`/`PrefabUtility` API is the safe alternative to both hand-editing scene YAML and requiring a human to click through the Inspector.
+- Because these are just static C# methods, they're also invokable headlessly via `-executeMethod`, so scene assembly doesn't strictly require a human driving the Editor GUI at all.
+- The connect-button UI deliberately uses legacy `UnityEngine.UI.Text` + the built-in `LegacyRuntime.ttf` font, not TextMeshPro — TMP needs its Essentials resources imported first or new text renders with no font assigned, and that failure mode can't be caught by a headless compile check.
+- NGO 2.x's `NetworkManager` inspector no longer shows the old Start Host/Server/Client buttons in Play Mode (present in 1.x); `Tools/Coop Setup/Debug: Start Host` (Play-mode-only, gated by a validate function) replaces it by calling `NetworkManager.Singleton.StartHost()` directly.
+
+## Unity 6 migration notes
+
+The project was originally scaffolded against Unity 2021.3.45f2 and later moved to 6000.5.5f1; a few things fell out along the way that are worth knowing if `manifest.json` or scripts changed since then start throwing errors again:
+
+- `com.unity.modules.vr` (and the rest of the boilerplate `com.unity.modules.*` block copied from the original Alteruna-derived `manifest.json`) is gone from the Unity 6 package registry — package resolution fails outright if it's present. None of those built-in modules need to be listed explicitly; Unity resolves what it actually needs.
+- `com.unity.2d.animation`, `com.unity.2d.spriteshape`, and `com.unity.2d.psdimporter` don't compile on Unity 6000.5's API (`Object.GetInstanceID()`/`TreeView` obsoletions turned into hard errors) and aren't used by this project — removed rather than fixed.
+- `Rigidbody2D.velocity` is obsolete in Unity 6; use `linearVelocity` (see `PlayerMovementNGO.cs`).
+- `TagManager.asset`'s layer list is YAML `- ` (dash-space) per empty entry; a bare `-` with no trailing space fails to parse and Unity silently falls back to default tags/layers instead of erroring loudly — caught only by actually opening the project, not by eyeballing the diff.
 
 ## Architecture
 
