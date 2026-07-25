@@ -127,6 +127,12 @@ Dedicated server runs on Compute Engine, not Cloud Run — NGO's default `UnityT
 - Firewall: `allow-ngo-udp` — ingress UDP `7777` from `0.0.0.0/0`, targets instances tagged `game-server`
 - The client's `NetworkManager` → `UnityTransport` → Connection Data must point `Address` at `34.50.24.161`, `Port` `7777`.
 
+**Gotchas hit deploying the real server (verified via `tcpdump` on the VM, not just "StartServer() returned true"):**
+- `UnityTransport.ConnectionData.ServerListenAddress` defaults to `127.0.0.1` regardless of what `Address` is set to. `StartServer()` reports success either way, but nothing outside the VM can reach it unless the server explicitly sets `ServerListenAddress = "0.0.0.0"` before starting (see `NetworkBootstrapper.cs`'s `UNITY_SERVER` branch).
+- A freshly built client `.exe` that's never been run has no Windows Firewall rule and gets its inbound UDP (the server's handshake replies) silently dropped, even though its own outbound packets reach the server fine — looks identical to a server-side problem from the client's logs alone. Needs explicit `New-NetFirewallRule` (in + out, UDP, `-Profile Any`) for the exact exe path.
+- Deploying via `gcloud compute scp --recurse` from Windows uses PuTTY's `pscp` under the hood, which behaves differently from OpenSSH `scp`: destination must be an absolute remote path (`/home/<user>`, not `~`) — `~` is passed through literally and PuTTY doesn't expand it — and the destination directory is created from the local folder's own name, so scp `ServerBuild` to `/home/<user>` (not `/home/<user>/ServerBuild`, which double-nests).
+- `nohup ... &` inside a single `gcloud compute ssh --command="..."` call routinely hangs the SSH session past the point the remote process has actually detached; don't treat that command's own timeout/hang as a failure signal — reconnect with a fresh `ssh --command` to check `ps aux`/logs independently.
+
 ## `ref/` directory
 
 `ref/` (gitignored, never committed) holds shallow clones of external repos kept only as local reference while building this project: `alteruna-platformer`, `mirror-2d-platformer`, `fishnet`, and `survival_tile` (a separate, unrelated Node.js/Socket.io + Phaser 3 project by the same author — its GCP/Cloud Run deployment pattern was reference material, not something this project depends on or imports code from).
