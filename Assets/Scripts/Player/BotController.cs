@@ -115,21 +115,21 @@ public class BotController : NetworkBehaviour
     // 다시 배선해야 한다.
     private void UpdateStageAuto()
     {
-        RisingHazardNGO hazard = Object.FindFirstObjectByType<RisingHazardNGO>();
+        RisingHazardNGO hazard = Object.FindAnyObjectByType<RisingHazardNGO>();
         if (hazard != null)
         {
             UpdateGroupAdvance();
             return;
         }
 
-        PushableBlockNGO block = Object.FindFirstObjectByType<PushableBlockNGO>();
+        PushableBlockNGO block = Object.FindAnyObjectByType<PushableBlockNGO>();
         if (block != null)
         {
             UpdatePushTarget(block);
             return;
         }
 
-        CarryableKeyNGO key = Object.FindFirstObjectByType<CarryableKeyNGO>();
+        CarryableKeyNGO key = Object.FindAnyObjectByType<CarryableKeyNGO>();
         if (key != null)
         {
             UpdateKeyRelay(key);
@@ -185,7 +185,7 @@ public class BotController : NetworkBehaviour
     // 사람 플레이테스트로 다단계 릴레이를 검증하는 몫은 남겨둔다.
     private void UpdateKeyRelay(CarryableKeyNGO key)
     {
-        KeyDoorNGO door = Object.FindFirstObjectByType<KeyDoorNGO>();
+        KeyDoorNGO door = Object.FindAnyObjectByType<KeyDoorNGO>();
         int myRank = GetMyRank();
 
         if (myRank == 0)
@@ -206,7 +206,7 @@ public class BotController : NetworkBehaviour
             return;
         }
 
-        SeesawPlatformNGO seesaw = Object.FindFirstObjectByType<SeesawPlatformNGO>();
+        SeesawPlatformNGO seesaw = Object.FindAnyObjectByType<SeesawPlatformNGO>();
         if (seesaw != null && (door == null || !door.isOpen.Value))
         {
             Transform holdPoint = (myRank % 2 == 1) ? seesaw.leftHoldPoint : seesaw.rightHoldPoint;
@@ -239,7 +239,7 @@ public class BotController : NetworkBehaviour
 
     private void UpdateGoToGoal()
     {
-        GoalZoneNGO goal = Object.FindFirstObjectByType<GoalZoneNGO>();
+        GoalZoneNGO goal = Object.FindAnyObjectByType<GoalZoneNGO>();
         if (goal == null)
         {
             HorizontalInput = 0f;
