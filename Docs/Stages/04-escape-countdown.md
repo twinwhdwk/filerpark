@@ -57,7 +57,8 @@ public class RisingHazardNGO : NetworkBehaviour
 
 이 스테이지는 원안이 상정한 "역할 배정"이 애초에 필요 없는 유일한 케이스라, [bot-coordination.md](bot-coordination.md)가 제안한 서버 방송형 배정과 실제로 쓰인 `BotController.BotMode.StageAuto`(로컬 자기판별) 사이의 차이가 가장 적게 드러난다 — 둘 중 어느 쪽으로 구현했어도 결과는 같았을 것이다.
 
-- `UpdateStageAuto()`가 씬에서 `RisingHazardNGO`를 찾으면(다른 어떤 기믹보다 먼저 검사) `UpdateGroupAdvance()`로 분기 — 전원 동일 로직.
-- 매 프레임 `GameObject.FindGameObjectsWithTag("Player")`로 전원의 x좌표를 읽어 팀 최소 진행도(`teamMinX`)를 구하고, `myLead = transform.position.x - teamMinX`가 `allowedLead`(2.5유닛)를 넘으면 전진을 멈춘다 — 원안이 제안한 것과 동일한 "속도를 늦추기보다 멈췄다 간다" 방식.
-- **아직 end-to-end 봇 검증 기록은 없다** — Stage 1-2처럼 5봇 GCP 실서버 테스트로 반복 확인된 상태는 아니고, 구현/배선만 완료된 상태다.
+- `UpdateStageAuto()`가 씬에서 `RisingHazardNGO`를 찾으면(다른 어떤 기믹보다 먼저 검사) `UpdateEscape()`로 분기 — 전원 동일 로직.
+- 매 프레임 전원의 x좌표로 팀 최소 진행도(`teamMinX`)를 구하고, `myLead = 내 x − teamMinX`가 `allowedLead`(2.5유닛)를 넘으면 전진을 멈춰 낙오자를 기다린다("제일 느린 사람에게 맞춘다").
+- **핵심 수정**: 골에 안전히 들어오면(`내 x ≥ 골중심 − 2`) 멈춰서 대기한다. 초기 구현은 목표 없이 계속 오른쪽으로만 걸어서 골존을 지나쳐 맵 오른쪽 끝(안전망 없음)에서 낭떠러지로 떨어져 영구 소프트락에 빠졌고, 클리어는 봇 무리가 골을 통과하는 찰나에 우연히 될 뿐이었다. 이제 전원이 골 안에서 멈춰 뭉치므로 "전원 동시 도달"이 안정적으로 성립한다.
+- **아직 end-to-end 봇 검증 기록은 없다** — Stage 1-2처럼 5봇 GCP 실서버 테스트로 반복 확인된 상태는 아니고, 코드 재설계 + 컴파일 검증까지 완료된 상태다.
 - **사람 플레이테스트가 필요한 부분**: "정말 재밌는 압박감을 주는 `riseSpeed` 값"은 봇으로는 알 수 없다 — 봇은 항상 동일한 로직으로 반응하므로 체감 긴장감/재미는 결국 사람이 판단해야 한다.
