@@ -3,6 +3,8 @@ using System.IO;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using Unity.Netcode;
 using Unity.Netcode.Components;
 using Unity.Netcode.Transports.UTP;
@@ -209,6 +211,88 @@ public static class NetworkSetupMenu
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
 
         Debug.Log("TestGround(바닥)와 SpawnPoint1을 생성했습니다. Ctrl+S로 저장하세요.");
+    }
+
+    // 실제 빌드에서는 Editor의 Tools 메뉴가 존재하지 않으므로, StartClient()를 부를
+    // 진짜 UI 버튼이 필요하다. TextMeshPro는 "Import TMP Essentials"를 거치지 않으면
+    // 폰트가 비어 깨질 수 있어(에디터 GUI로 직접 확인 못 하는 상황이라 위험), 항상
+    // 존재하는 레거시 UI.Text + 내장 폰트(LegacyRuntime.ttf)로 만든다.
+    [MenuItem("Tools/Coop Setup/5. Create Connect UI")]
+    public static void CreateConnectUI()
+    {
+        if (GameObject.Find("ConnectCanvas") != null)
+        {
+            Debug.LogWarning("ConnectCanvas가 이미 씬에 있어서 새로 만들지 않았습니다.");
+            return;
+        }
+
+        if (Object.FindFirstObjectByType<EventSystem>() == null)
+        {
+            GameObject eventSystemObj = new GameObject("EventSystem");
+            eventSystemObj.AddComponent<EventSystem>();
+            eventSystemObj.AddComponent<StandaloneInputModule>();
+            Undo.RegisterCreatedObjectUndo(eventSystemObj, "Create EventSystem");
+        }
+
+        GameObject canvasObj = new GameObject("ConnectCanvas");
+        Canvas canvas = canvasObj.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        canvasObj.AddComponent<GraphicRaycaster>();
+
+        GameObject buttonObj = new GameObject("ConnectButton");
+        buttonObj.transform.SetParent(canvasObj.transform, false);
+        RectTransform buttonRect = buttonObj.AddComponent<RectTransform>();
+        buttonRect.sizeDelta = new Vector2(280f, 80f);
+        buttonRect.anchorMin = new Vector2(0.5f, 0.5f);
+        buttonRect.anchorMax = new Vector2(0.5f, 0.5f);
+        buttonRect.anchoredPosition = Vector2.zero;
+
+        Image buttonImage = buttonObj.AddComponent<Image>();
+        buttonImage.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        buttonImage.type = Image.Type.Sliced;
+        buttonImage.color = new Color(0.2f, 0.6f, 0.95f);
+
+        Button button = buttonObj.AddComponent<Button>();
+        button.targetGraphic = buttonImage;
+
+        GameObject textObj = new GameObject("Label");
+        textObj.transform.SetParent(buttonObj.transform, false);
+        RectTransform textRect = textObj.AddComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.sizeDelta = Vector2.zero;
+
+        Text label = textObj.AddComponent<Text>();
+        label.text = "서버 접속";
+        label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        label.fontSize = 28;
+        label.alignment = TextAnchor.MiddleCenter;
+        label.color = Color.white;
+
+        GameObject networkManagerObj = GameObject.Find("NetworkManager");
+        NetworkBootstrapper bootstrapper = networkManagerObj != null
+            ? networkManagerObj.GetComponent<NetworkBootstrapper>()
+            : null;
+
+        if (bootstrapper != null)
+        {
+            UnityEditor.Events.UnityEventTools.AddPersistentListener(button.onClick, bootstrapper.ConnectToServer);
+            bootstrapper.startMenuUI = canvasObj;
+            EditorUtility.SetDirty(networkManagerObj);
+        }
+        else
+        {
+            Debug.LogWarning("NetworkManager를 못 찾아서 버튼 OnClick을 자동 연결하지 못했습니다. 먼저 '1. Create NetworkManager'를 실행하세요.");
+        }
+
+        Undo.RegisterCreatedObjectUndo(canvasObj, "Create Connect UI");
+        Selection.activeGameObject = canvasObj;
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+
+        Debug.Log("ConnectCanvas 생성 완료 -- 버튼 클릭 시 NetworkBootstrapper.ConnectToServer() 호출되도록 연결됨. Ctrl+S로 저장하세요.");
     }
 
     private static Sprite GetOrCreatePlaceholderSprite()
