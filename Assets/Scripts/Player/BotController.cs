@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 
@@ -7,13 +6,18 @@ using Unity.Netcode;
 // 실제 클라이언트가 쓰는 것과 동일한 NetworkVariable/ServerRpc 경로를 그대로 타므로
 // 네트워크 동작까지 포함해 진짜에 가까운 시뮬레이션이 된다.
 // BotProcess.IsBot(= -bot 커맨드라인 인자로 실행된 프로세스)일 때만 스스로 활성화된다.
+//
+// StageAuto 모드는 각 스테이지의 "정답 솔루션"을 봇이 그대로 재현하도록 설계됐다.
+// 스테이지 판별은 씬에 어떤 기믹 컴포넌트가 로드돼 있는지로 하고(씬 이름/태그 불필요),
+// 역할이 필요한 경우엔 GetMyRank()(접속 Player를 OwnerClientId 오름차순 정렬한 순번)로
+// 모든 봇이 서버 방송 없이 결정론적으로 같은 배정에 도달한다.
 public class BotController : NetworkBehaviour
 {
     public enum BotMode
     {
-        Patrol,        // 스폰 지점 좌우로 왕복 -- 버튼/문처럼 특정 지형을 반복 통과시키는 테스트용
-        FollowNearest, // 가장 가까운 다른 플레이어를 따라다님 -- 스택/푸시처럼 두 플레이어가 붙어있어야 하는 테스트용
-        StageAuto,     // 현재 로드된 스테이지에 어떤 기믹 컴포넌트가 있는지 보고 알맞은 협동 행동을 스스로 고른다
+        Patrol,        // 스폰 지점 좌우로 왕복 -- 단순 수동 테스트용
+        FollowNearest, // 가장 가까운 다른 플레이어를 따라다님 -- 단순 수동 테스트용
+        StageAuto,     // 로드된 스테이지 기믹을 스스로 판별해 그 스테이지의 솔루션대로 움직인다
     }
 
     [Header("봇 동작")]
@@ -26,9 +30,40 @@ public class BotController : NetworkBehaviour
     public float HorizontalInput { get; private set; }
     public bool JumpRequested { get; private set; }
 
+    // 시소 절반 폭(스프라이트 6유닛 → ±3). 시소 중심 x를 기준으로 좌/우 절반과
+    // "다 건넜다" 판정 경계를 계산하는 데 쓴다.
+    private const float SeesawHalf = 3f;
+    private const float AcrossMargin = 0.5f;
+    // 스테이지 4: 팀의 최소 진행도보다 이만큼 이상 앞서면 낙오자를 기다린다.
+    private const float AllowedLead = 2.5f;
+
     private Vector3 spawnPosition;
     private int direction = 1;
     private float nextJumpTime;
+
+    // 스테이지 기믹 참조 캐시. 매 프레임 FindAnyObjectByType를 부르지 않도록
+    // 0.5초마다(또는 스테이지 전환으로 goal이 사라졌을 때 즉시) 다시 스캔한다.
+    private float nextStageScan;
+    private GoalZoneNGO goal;
+    private PushableBlockNGO block;
+    private CarryableKeyNGO key;
+    private KeyDoorNGO keyDoor;
+    private SeesawPlatformNGO seesaw;
+    private RisingHazardNGO hazard;
+    private CoopDoorNGO coopDoor;
+    private CoopButtonNGO coopButton;
+
+    // 매 StageAuto 프레임마다 한 번만 갱신해서 하위 로직이 공유하는 스크래치.
+    private GameObject[] players;
+    private float nextPickupRequest;
+
+    // "막힘 감지" 점프: 가로로 가려는데 위치가 안 바뀌면(작은 턱에 걸림) 점프한다.
+    // 랜덤 점프와 달리 실제로 막혔을 때만 발동하므로 다리/시소에서 헛점프로
+    // 떨어지는 일이 없다. 밀기처럼 "일부러 눌러 붙어 정지"하는 상황엔 끄고, 시소
+    // 횡단처럼 턱을 넘어야 하는 상황에서만 켠다(unstickEnabled).
+    private bool unstickEnabled;
+    private float unstickLastX;
+    private float unstickStuckTime;
 
     public override void OnNetworkSpawn()
     {
@@ -42,6 +77,7 @@ public class BotController : NetworkBehaviour
         if (!enabled) return;
 
         spawnPosition = transform.position;
+        unstickLastX = transform.position.x;
         ScheduleNextJump();
     }
 
@@ -53,6 +89,7 @@ public class BotController : NetworkBehaviour
         {
             case BotMode.FollowNearest:
                 UpdateFollowNearest();
+                MaybeRandomJump();
                 break;
             case BotMode.StageAuto:
                 UpdateStageAuto();
@@ -60,9 +97,15 @@ public class BotController : NetworkBehaviour
             case BotMode.Patrol:
             default:
                 UpdatePatrol();
+                MaybeRandomJump();
                 break;
         }
+    }
 
+    // ------------------------------------------------------------------ 수동 테스트 모드
+
+    private void MaybeRandomJump()
+    {
         if (Time.time >= nextJumpTime)
         {
             JumpRequested = true;
@@ -80,13 +123,11 @@ public class BotController : NetworkBehaviour
 
     private void UpdateFollowNearest()
     {
-        // ConnectedClients는 서버에서만 신뢰할 수 있으므로, 모든 클라이언트에서
-        // 동일하게 동작하도록 로컬에 스폰되어 있는 "Player" 태그 오브젝트를 직접 찾는다.
-        GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
+        GameObject[] all = GameObject.FindGameObjectsWithTag("Player");
         GameObject nearest = null;
         float nearestDist = float.MaxValue;
 
-        foreach (GameObject player in players)
+        foreach (GameObject player in all)
         {
             if (player == gameObject) continue;
             float dist = Mathf.Abs(player.transform.position.x - transform.position.x);
@@ -107,52 +148,75 @@ public class BotController : NetworkBehaviour
         HorizontalInput = Mathf.Abs(dx) < followDistance ? 0f : Mathf.Sign(dx);
     }
 
-    // 스테이지 2~4는 각자 새 기믹 컴포넌트(PushableBlockNGO/CarryableKeyNGO/RisingHazardNGO)를
-    // 씬에 배치하는 것으로 스스로를 드러낸다 -- 봇은 씬 이름이나 태그를 몰라도, 로드된
-    // 씬에서 어떤 컴포넌트를 찾을 수 있는지만 보고 알맞은 행동을 고른다. 새 스테이지를
-    // 추가해도 이 파일이나 태그 목록(TagManager.asset)을 손댈 필요가 없다는 게 핵심 --
-    // Player 프리팹은 모든 씬에서 공유되므로 이 자기-판별 방식이 아니면 씬마다 봇 동작을
-    // 다시 배선해야 한다.
+    // ------------------------------------------------------------------ StageAuto
+
     private void UpdateStageAuto()
     {
-        RisingHazardNGO hazard = Object.FindAnyObjectByType<RisingHazardNGO>();
-        if (hazard != null)
-        {
-            UpdateGroupAdvance();
-            return;
-        }
+        RefreshStageRefs();
+        players = GameObject.FindGameObjectsWithTag("Player");
+        unstickEnabled = false;
 
-        PushableBlockNGO block = Object.FindAnyObjectByType<PushableBlockNGO>();
-        if (block != null)
-        {
-            UpdatePushTarget(block);
-            return;
-        }
+        // 판별 순서는 각 스테이지가 가진 "고유" 기믹 기준. 4개 스테이지는 서로
+        // 겹치는 기믹이 없어 이 순서로 정확히 하나만 매칭된다.
+        if (hazard != null) UpdateEscape();
+        else if (block != null) UpdateBlockPush();
+        else if (key != null) UpdateKeyRelay();
+        else if (coopDoor != null && goal != null) UpdateGatekeeper();
+        else if (goal != null) MoveToward(goal.transform.position.x); // 기믹 없는 골 전용 씬: 그냥 골로 모인다
+        else UpdatePatrol();
 
-        CarryableKeyNGO key = Object.FindAnyObjectByType<CarryableKeyNGO>();
-        if (key != null)
-        {
-            UpdateKeyRelay(key);
-            return;
-        }
-
-        UpdatePatrol();
+        UpdateUnstickJump();
     }
 
-    // 스테이지 2 (돌덩이 운반): 원래는 "인원의 60%만 미는 팀, 나머지는 대기"로
-    // OwnerClientId 순위를 나눠 배정했는데(문서가 원한 "과반수 긴장감"), 5봇 테스트에서
-    // 그 방식이 간헐적으로 영영 정체되는 걸 반복 관찰했다 -- 지정된 3명 중 단 1명만
-    // 잠깐 밀림/타이밍이 어긋나도 나머지 "대기" 역할 봇들은 절대 거들지 않으므로
-    // overlap이 3을 넘을 유일한 경로가 막혀버린다(다시 채워질 다른 수단이 없음). 순위
-    // 계산 자체가 5개의 독립된 프로세스 사이에서 완벽히 동일한 순간에 일치한다는 보장도
-    // 약하다. 봇 전원이 그냥 미는 방향으로 계속 걷게 해서 이 단일 실패점을 없앤다 --
-    // 실제 게이팅(요구 인원 이상이어야 움직임)은 여전히 PushableBlockNGO 쪽에서
-    // 서버 권위로 검증하므로 협동 기믹 자체는 그대로 유지된다.
-    private void UpdatePushTarget(PushableBlockNGO block)
+    private void RefreshStageRefs()
+    {
+        // goal은 모든 스테이지에 존재하므로, 스테이지가 언로드되면 goal이 파괴(fake-null)돼
+        // 즉시 재스캔을 유발한다 -- 새 스테이지 참조를 프레임 지연 없이 잡는다.
+        if (Time.time < nextStageScan && goal != null) return;
+        nextStageScan = Time.time + 0.5f;
+
+        goal = Object.FindAnyObjectByType<GoalZoneNGO>();
+        block = Object.FindAnyObjectByType<PushableBlockNGO>();
+        key = Object.FindAnyObjectByType<CarryableKeyNGO>();
+        keyDoor = Object.FindAnyObjectByType<KeyDoorNGO>();
+        seesaw = Object.FindAnyObjectByType<SeesawPlatformNGO>();
+        hazard = Object.FindAnyObjectByType<RisingHazardNGO>();
+        coopDoor = Object.FindAnyObjectByType<CoopDoorNGO>();
+        coopButton = Object.FindAnyObjectByType<CoopButtonNGO>();
+    }
+
+    // ------------------------------------------------------------------ Stage 1: 문지기
+
+    // 솔루션: rank0이 버튼 위에 서서 문을 열어두고, 나머지는 문을 통과해 골 쪽으로 간다.
+    // 골존이 맵 전체를 덮도록 설계돼 있어(현 지오메트리) rank0가 버튼을 떠나지 않아도
+    // 전원이 골 안에 들어와 클리어된다 -- "한 명이 열고 나머지가 통과"라는 기믹을
+    // 그대로 보여주면서 100% 재현 가능하다.
+    private void UpdateGatekeeper()
+    {
+        int rank = GetMyRank();
+
+        if (rank == 0 && coopButton != null)
+        {
+            MoveToward(coopButton.transform.position.x);
+            return;
+        }
+
+        // 나머지: 문 너머로 이동(문이 닫혀 있으면 앞에서 대기하다 열리면 통과).
+        float targetX = coopDoor.transform.position.x + 2f;
+        MoveToward(targetX);
+    }
+
+    // ------------------------------------------------------------------ Stage 2: 돌덩이 운반
+
+    // 솔루션: 전원이 블록을 목표 방향으로 민다(요구 인원 게이팅은 서버가 검증). 블록이
+    // 구덩이를 잇는 다리가 되면(isInPlace) 전원이 그 위를 건너 골로 간다. 특정 봇만
+    // 밀게 배정하면 한 명만 타이밍이 어긋나도 영영 정체되므로 전원 밀기로 단일 실패점을
+    // 없앤다. 이 스테이지는 바닥과 블록 윗면이 평평(flush)해 점프가 필요 없다.
+    private void UpdateBlockPush()
     {
         if (block.isInPlace.Value)
         {
-            UpdateGoToGoal();
+            MoveTowardGoal();
             return;
         }
 
@@ -162,100 +226,220 @@ public class BotController : NetworkBehaviour
             return;
         }
 
-        float pushDir = Mathf.Sign(block.targetPoint.position.x - block.transform.position.x);
-        HorizontalInput = pushDir;
+        HorizontalInput = Mathf.Sign(block.targetPoint.position.x - block.transform.position.x);
     }
 
-    // 스테이지 3 (열쇠 릴레이): 순위 0번 봇만 열쇠를 줍고 문까지 운반한다. 나머지는
-    // 문이 열리기 전까지 시소 좌/우로 절반씩 나뉘어 균형을 맞추다가, 문이 열리면 골로
-    // 향한다. 설계 문서의 "틈 건너 릴레이"는 정밀 타이밍이 필요해 봇 자동화 신뢰도가
-    // 가장 낮다고 문서 스스로 명시한 부분이라, 이 구현은 단일 운반자로 단순화했다 --
-    // 사람 플레이테스트로 다단계 릴레이를 검증하는 몫은 남겨둔다.
-    private void UpdateKeyRelay(CarryableKeyNGO key)
+    // ------------------------------------------------------------------ Stage 3: 열쇠 릴레이
+
+    // 솔루션:
+    //  - rank0(운반자): 열쇠를 주워 문 앞으로 가서 문을 열어둔 채 대기 → 나머지가 다
+    //    건너면 자기도 시소를 단독으로(=자동 균형) 건너 골로.
+    //  - 나머지: 문이 열릴 때까지 대기 → 시소를 "균형 규칙"으로 한 명씩 건넌다(한쪽이
+    //    무겁지 않을 때만 진입). 이러면 |좌−우| ≤ 1 로 유지돼 시소가 tiltThreshold(1.5)를
+    //    넘지 않고 계속 수평이라 안전하게 건널 수 있다.
+    private void UpdateKeyRelay()
     {
-        KeyDoorNGO door = Object.FindAnyObjectByType<KeyDoorNGO>();
-        int myRank = GetMyRank();
+        int rank = GetMyRank();
+        float seesawX = seesaw != null ? seesaw.transform.position.x : 12f;
+        float acrossX = seesawX + SeesawHalf + AcrossMargin;
 
-        if (myRank == 0)
+        if (rank == 0)
         {
-            if (key.carrierClientId.Value != OwnerClientId)
-            {
-                MoveToward(key.transform.position);
-                float distToKey = Vector2.Distance(transform.position, key.transform.position);
-                if (distToKey < key.pickupRadius * 0.8f)
-                {
-                    key.RequestPickupServerRpc();
-                }
-                return;
-            }
-
-            if (door != null) MoveToward(door.transform.position);
-            else UpdateGoToGoal();
+            UpdateKeyCarrier(seesawX, acrossX);
             return;
         }
 
-        SeesawPlatformNGO seesaw = Object.FindAnyObjectByType<SeesawPlatformNGO>();
-        if (seesaw != null && (door == null || !door.isOpen.Value))
+        // --- 비운반자 ---
+        bool doorOpen = keyDoor != null && keyDoor.isOpen.Value;
+        if (!doorOpen)
         {
-            Transform holdPoint = (myRank % 2 == 1) ? seesaw.leftHoldPoint : seesaw.rightHoldPoint;
-            if (holdPoint != null)
+            // 문이 열리기 전엔 제자리 대기(운반자가 열쇠를 문으로 가져올 때까지).
+            // 스폰이 −6~6로 흩어져 있어, 대기 중 흩어진 채로 있다가 문이 열리면
+            // 자연히 시차를 두고 시소에 도착 -> 균형 규칙이 순차 횡단을 만든다.
+            HorizontalInput = 0f;
+            return;
+        }
+
+        if (transform.position.x >= acrossX)
+        {
+            MoveTowardGoal();
+            return;
+        }
+
+        CrossSeesawBalanced(seesawX);
+    }
+
+    private void UpdateKeyCarrier(float seesawX, float acrossX)
+    {
+        // 아직 안 들었으면: 열쇠로 다가가 주울 때까지 요청을 반복한다. 클라이언트가 보는
+        // 자기 위치는 NetworkTransform 보간 때문에 서버가 보는 위치보다 뒤처질 수 있어
+        // (실측: 약 0.2유닛) 한 번의 판정으로는 놓칠 수 있으므로, 넉넉한 반경 안에서
+        // 계속 다가가며 반복 요청해 서버가 승인할 때까지 시도한다.
+        if (key.carrierClientId.Value != OwnerClientId)
+        {
+            MoveToward(key.transform.position.x);
+            float dist = Vector2.Distance(transform.position, key.transform.position);
+            if (dist < key.pickupRadius * 1.5f && Time.time >= nextPickupRequest)
             {
-                MoveToward(holdPoint.position);
-                return;
+                nextPickupRequest = Time.time + 0.2f;
+                key.RequestPickupServerRpc();
             }
+            return;
         }
 
-        UpdateGoToGoal();
-    }
-
-    // 스테이지 4 (탈출 카운트다운): 역할 분담이 없다 -- 전원이 같은 규칙(팀의 최소
-    // 진행도보다 너무 앞서지 않기)을 따르는 것만으로 "제일 느린 사람에게 맞춘다"는
-    // 스테이지 취지가 그대로 구현된다.
-    private void UpdateGroupAdvance()
-    {
-        GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
-        float teamMinX = float.MaxValue;
-        foreach (GameObject player in players)
+        // 들었음: 나머지가 다 건넜으면 나도 건너 골로(단독이라 시소는 자동으로 수평).
+        if (AllOthersAcross(acrossX))
         {
-            teamMinX = Mathf.Min(teamMinX, player.transform.position.x);
+            if (transform.position.x >= acrossX) MoveTowardGoal();
+            else CrossSeesawSolo(seesawX);
+            return;
         }
 
-        const float allowedLead = 2.5f;
-        float myLead = transform.position.x - teamMinX;
-        HorizontalInput = myLead > allowedLead ? 0f : 1f;
+        // 아직 건너는 중인 동료가 있으면 문 앞을 지키며 문을 열어둔다. 문 중심에서 살짝
+        // 왼쪽(−0.6)에 서면, 오른쪽으로 밀려나도 문 중심(열림 판정 중심)에 가까워져
+        // 오히려 더 확실히 열린 채로 유지된다.
+        float doorX = keyDoor != null ? keyDoor.transform.position.x : 7f;
+        MoveToward(doorX - 0.6f);
     }
 
-    private void UpdateGoToGoal()
+    // 시소 좌/우 절반의 인원을 세어, 내가 왼쪽에서 진입할 때 좌측이 우측보다 무거워지지
+    // 않을 때만(L ≤ R) 한 발 올린다. 이미 시소 위면 오른쪽으로 계속 건너간다. 이 규칙은
+    // 독립 프로세스인 봇들끼리 합의 없이도 |좌−우| ≤ 1을 유지시켜 시소를 수평으로 만든다.
+    private void CrossSeesawBalanced(float seesawX)
     {
-        GoalZoneNGO goal = Object.FindAnyObjectByType<GoalZoneNGO>();
+        unstickEnabled = true; // 시소 윗면 턱을 만나면 막힘 점프로 넘는다
+
+        float myX = transform.position.x;
+        float leftEdge = seesawX - SeesawHalf;
+
+        if (myX >= leftEdge)
+        {
+            HorizontalInput = 1f; // 이미 시소 위 -> 계속 오른쪽으로 건넌다
+            return;
+        }
+
+        int left = 0, right = 0;
+        foreach (GameObject p in players)
+        {
+            float px = p.transform.position.x;
+            if (px >= leftEdge && px < seesawX) left++;
+            else if (px >= seesawX && px <= seesawX + SeesawHalf) right++;
+        }
+
+        if (left <= right)
+        {
+            HorizontalInput = 1f; // 좌측이 안 무거우니 진입
+        }
+        else
+        {
+            MoveToward(leftEdge - 0.3f); // 시소 바로 앞에서 대기(균형 맞을 때까지)
+        }
+    }
+
+    private void CrossSeesawSolo(float seesawX)
+    {
+        unstickEnabled = true;
+        HorizontalInput = 1f; // 단독 횡단은 항상 균형(한 명뿐) -> 그냥 오른쪽으로
+    }
+
+    // ------------------------------------------------------------------ Stage 4: 탈출 카운트다운
+
+    // 솔루션: 전원이 오른쪽 골로 달린다. 단 (1) 골에 도달하면 멈춰서 낭떠러지로
+    // 행진하지 않고 골 안에서 대기하며 나머지를 기다리고, (2) 팀의 최소 진행도보다
+    // 너무 앞서면 낙오자를 기다린다("제일 느린 사람에게 맞춘다"). 벽(0.3u/s)보다
+    // 봇(5u/s)이 훨씬 빨라 시간 압박은 문제되지 않고, 관건은 전원이 동시에 골 안에
+    // 모이는 것이다 -- 그래서 골에서 멈춰 뭉치게 한다.
+    private void UpdateEscape()
+    {
         if (goal == null)
         {
             HorizontalInput = 0f;
             return;
         }
-        MoveToward(goal.transform.position);
+
+        float goalX = goal.transform.position.x;
+        float myX = transform.position.x;
+
+        // 골 안에 안전히 들어왔으면 멈춰서 대기(골존 폭 6 → 중심−2면 확실히 안쪽).
+        if (myX >= goalX - 2f)
+        {
+            HorizontalInput = 0f;
+            return;
+        }
+
+        float teamMinX = float.MaxValue;
+        foreach (GameObject p in players) teamMinX = Mathf.Min(teamMinX, p.transform.position.x);
+
+        // 팀을 너무 앞서면 멈춰서 기다린다(가장 뒤처진 봇은 myLead=0이라 항상 전진 -> 교착 없음).
+        HorizontalInput = (myX - teamMinX > AllowedLead) ? 0f : 1f;
     }
 
-    private void MoveToward(Vector3 target)
+    // ------------------------------------------------------------------ 공통 헬퍼
+
+    private void MoveTowardGoal()
     {
-        float dx = target.x - transform.position.x;
+        if (goal == null)
+        {
+            HorizontalInput = 0f;
+            return;
+        }
+        MoveToward(goal.transform.position.x);
+    }
+
+    private void MoveToward(float targetX)
+    {
+        float dx = targetX - transform.position.x;
         HorizontalInput = Mathf.Abs(dx) < 0.2f ? 0f : Mathf.Sign(dx);
     }
 
-    // 접속한 Player 오브젝트를 OwnerClientId 오름차순으로 정렬했을 때 내 순번.
-    // NetworkObject.OwnerClientId는 모든 클라이언트에 이미 동기화되어 있으므로,
-    // 서버가 역할을 따로 배정/방송하지 않아도 모든 봇이 동일한 결론에 도달한다.
+    // 접속한 Player 오브젝트 중 내 OwnerClientId보다 작은 것의 수 = 오름차순 정렬 시 내 순번.
+    // 모든 클라이언트가 동일한 OwnerClientId 집합을 보므로 서버 방송 없이 같은 결론에 도달한다.
     private int GetMyRank()
     {
-        GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
-        List<ulong> ids = new List<ulong>();
-        foreach (GameObject player in players)
+        int rank = 0;
+        foreach (GameObject p in players)
         {
-            NetworkObject networkObject = player.GetComponent<NetworkObject>();
-            if (networkObject != null) ids.Add(networkObject.OwnerClientId);
+            NetworkObject no = p.GetComponent<NetworkObject>();
+            if (no != null && no.OwnerClientId < OwnerClientId) rank++;
         }
-        ids.Sort();
-        return ids.IndexOf(OwnerClientId);
+        return rank;
+    }
+
+    private bool AllOthersAcross(float acrossX)
+    {
+        foreach (GameObject p in players)
+        {
+            if (p == gameObject) continue;
+            if (p.transform.position.x < acrossX) return false;
+        }
+        return true;
+    }
+
+    private void UpdateUnstickJump()
+    {
+        // 가로로 가려는데(입력 있음) 위치가 거의 안 변하면 작은 턱에 걸린 것 -> 점프.
+        // 켜진 상황(시소 횡단)에서만 동작하고, 밀기/대기 등에는 꺼져 있어 헛점프가 없다.
+        if (!unstickEnabled || Mathf.Abs(HorizontalInput) < 0.5f)
+        {
+            unstickStuckTime = 0f;
+            unstickLastX = transform.position.x;
+            return;
+        }
+
+        if (Mathf.Abs(transform.position.x - unstickLastX) > 0.05f)
+        {
+            unstickStuckTime = 0f;
+            unstickLastX = transform.position.x;
+            return;
+        }
+
+        unstickStuckTime += Time.deltaTime;
+        if (unstickStuckTime >= 0.35f)
+        {
+            JumpRequested = true;
+            unstickStuckTime = 0f;
+            unstickLastX = transform.position.x;
+        }
     }
 
     private void ScheduleNextJump()
