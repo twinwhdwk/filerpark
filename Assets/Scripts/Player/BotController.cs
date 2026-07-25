@@ -139,10 +139,15 @@ public class BotController : NetworkBehaviour
         UpdatePatrol();
     }
 
-    // 스테이지 2 (돌덩이 운반): 접속 인원의 60% 이상만 "미는 팀"으로 배정한다
-    // (순위는 OwnerClientId 오름차순 -- 모든 클라이언트가 동일한 목록을 보므로 서버가
-    // 따로 역할을 방송할 필요 없이 각자 결정론적으로 같은 결론에 도달한다). 나머지는
-    // 블록이 도착할 때까지 대기했다가 골로 향한다.
+    // 스테이지 2 (돌덩이 운반): 원래는 "인원의 60%만 미는 팀, 나머지는 대기"로
+    // OwnerClientId 순위를 나눠 배정했는데(문서가 원한 "과반수 긴장감"), 5봇 테스트에서
+    // 그 방식이 간헐적으로 영영 정체되는 걸 반복 관찰했다 -- 지정된 3명 중 단 1명만
+    // 잠깐 밀림/타이밍이 어긋나도 나머지 "대기" 역할 봇들은 절대 거들지 않으므로
+    // overlap이 3을 넘을 유일한 경로가 막혀버린다(다시 채워질 다른 수단이 없음). 순위
+    // 계산 자체가 5개의 독립된 프로세스 사이에서 완벽히 동일한 순간에 일치한다는 보장도
+    // 약하다. 봇 전원이 그냥 미는 방향으로 계속 걷게 해서 이 단일 실패점을 없앤다 --
+    // 실제 게이팅(요구 인원 이상이어야 움직임)은 여전히 PushableBlockNGO 쪽에서
+    // 서버 권위로 검증하므로 협동 기믹 자체는 그대로 유지된다.
     private void UpdatePushTarget(PushableBlockNGO block)
     {
         if (block.isInPlace.Value)
@@ -157,23 +162,6 @@ public class BotController : NetworkBehaviour
             return;
         }
 
-        int totalPlayers = GameObject.FindGameObjectsWithTag("Player").Length;
-        int requiredPushers = Mathf.Max(1, Mathf.CeilToInt(totalPlayers * 0.6f));
-        int myRank = GetMyRank();
-
-        if (myRank >= requiredPushers)
-        {
-            HorizontalInput = 0f;
-            return;
-        }
-
-        // 계산된 "대기 지점"으로 걸어가게 했더니 여러 겹의 버그가 났다 -- 전원 같은
-        // 좌표를 노리면 서로의 물리 콜라이더에 막혀 정체되고(overlap이 3을 못 넘음),
-        // rank별로 좌표를 흩어놔도(0.6 간격) 그 간격이 플레이어 폭(~0.9)보다 좁아
-        // 여전히 서로 부딪혀 정체되었다. 스폰 지점이 전부 블록의 미는 반대편(왼쪽)에
-        // 있다는 레벨 전제 위에서, 그냥 미는 방향으로 계속 걸어가게 하는 게 훨씬
-        // 단순하고 견고하다 -- 블록의 솔리드 콜라이더가 알아서 정지시키고, 그 위치는
-        // 이미 넓은 트리거 범위(pushStandoffDistance보다 더 넓게 잡음) 안에 든다.
         float pushDir = Mathf.Sign(block.targetPoint.position.x - block.transform.position.x);
         HorizontalInput = pushDir;
     }
