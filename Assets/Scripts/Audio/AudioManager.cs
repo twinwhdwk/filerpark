@@ -111,10 +111,12 @@ public class AudioManager : MonoBehaviour
         musicFadeRoutine = StartCoroutine(CrossfadeRoutine(clip));
     }
 
+    // targetVolume은 매 프레임 MusicVolume/MasterVolume에서 다시 계산한다 -- 한 번만
+    // 캡처해두면, 페이드가 도는 동안(씬 전환 시 흔히 발생) 슬라이더를 움직여도 그
+    // 조작이 무시되고 코루틴이 끝난 뒤 페이드 시작 시점의 낡은 값으로 덮어써진다.
     private IEnumerator CrossfadeRoutine(AudioClip nextClip)
     {
         const float fadeTime = 0.6f;
-        float targetVolume = MusicVolume * MasterVolume;
 
         float t = 0f;
         float startVolume = musicSource.volume;
@@ -132,10 +134,10 @@ public class AudioManager : MonoBehaviour
         while (t < fadeTime)
         {
             t += Time.unscaledDeltaTime;
-            musicSource.volume = Mathf.Lerp(0f, targetVolume, t / fadeTime);
+            musicSource.volume = Mathf.Lerp(0f, MusicVolume * MasterVolume, t / fadeTime);
             yield return null;
         }
-        musicSource.volume = targetVolume;
+        musicSource.volume = MusicVolume * MasterVolume;
         musicFadeRoutine = null;
     }
 

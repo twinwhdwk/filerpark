@@ -35,8 +35,12 @@ public class ConnectionStatusUI : MonoBehaviour
     private void HandleDisconnected(ulong clientId)
     {
         NetworkManager manager = NetworkManager.Singleton;
-        if (manager == null || manager.IsServer) return; // 데디케이티드 서버/호스트 자신은 이 UI 대상이 아님.
-        if (clientId != manager.LocalClientId) return; // 다른 플레이어의 접속 해제는 스코어보드로 이미 드러남.
+        // 데디케이티드 서버/호스트 자신은 이 UI 대상이 아님. LocalClientId와 비교하는
+        // 방식은 쓰지 않는다 -- 접속 해제 처리 도중 LocalClientId가 언제 리셋되는지
+        // NGO 내부 타이밍에 좌우되어, 정작 감지하려는 "내 접속이 끊긴" 상황 자체를
+        // 놓칠 수 있다. 클라이언트 빌드에서 이 콜백은 사실상 자기 자신의 접속
+        // 해제에만 발생하므로 IsServer만으로 충분하다.
+        if (manager == null || manager.IsServer) return;
 
         if (overlayPanel != null) overlayPanel.SetActive(true);
         if (messageText != null)
