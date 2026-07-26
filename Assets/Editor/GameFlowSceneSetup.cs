@@ -108,6 +108,7 @@ public static class GameFlowSceneSetup
         GameObject audioManagerObj = new GameObject("AudioManager");
         audioManagerObj.AddComponent<AudioManager>();
 
+        BuildLoadingScreenUI();
         BuildPauseMenuUI();
         BuildConnectionStatusUI();
 
@@ -1035,6 +1036,45 @@ public static class GameFlowSceneSetup
         pauseMenu.sfxSlider = sfxSlider;
 
         pausePanel.SetActive(false);
+    }
+
+    // Lobby<->Stage 씬 전환(Unload -> 전원 대기 -> Load) 사이의 공백을 채우는 로딩
+    // 오버레이. sortingOrder를 기본 UI보다는 높고 일시정지/접속-끊김 오버레이보다는
+    // 낮게 잡아, 둘 중 하나가 동시에 열려 있어도 더 급한 정보가 항상 위에 뜨게 한다.
+    private static void BuildLoadingScreenUI()
+    {
+        LoadThemeFonts();
+
+        GameObject canvasObj = new GameObject("LoadingScreenCanvas");
+        Canvas canvas = canvasObj.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 50;
+        CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        canvasObj.AddComponent<GraphicRaycaster>();
+
+        LoadingScreenUI loadingScreen = canvasObj.AddComponent<LoadingScreenUI>();
+
+        GameObject overlayPanel = new GameObject("OverlayPanel");
+        overlayPanel.transform.SetParent(canvasObj.transform, false);
+        RectTransform overlayRect = overlayPanel.AddComponent<RectTransform>();
+        overlayRect.anchorMin = Vector2.zero;
+        overlayRect.anchorMax = Vector2.one;
+        overlayRect.offsetMin = Vector2.zero;
+        overlayRect.offsetMax = Vector2.zero;
+        Image bg = overlayPanel.AddComponent<Image>();
+        bg.sprite = NetworkSetupMenu.GetOrCreatePlaceholderSprite();
+        bg.color = UITheme.ColorBgSecondary;
+
+        Text message = CreateLabel(overlayPanel.transform, "MessageLabel", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(500f, 100f),
+            36, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold);
+        message.text = "로딩 중";
+
+        loadingScreen.overlayPanel = overlayPanel;
+        loadingScreen.messageText = message;
+
+        overlayPanel.SetActive(false);
     }
 
     // 의도치 않은 접속 끊김(서버 다운/네트워크 문제)을 알려주는 전체 화면 오버레이.
