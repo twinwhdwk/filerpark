@@ -2,8 +2,9 @@ using UnityEngine;
 using UnityEngine.UI;
 
 // "게임 스테이지 화면" -- 맵에서 노드를 클릭하면 뜨는 상세 카드. StageDefinition의
-// 내용을 그대로 보여주기만 하는 뷰이고, 실제 게임플레이 로딩은 아직 이 프로젝트에
-// 없다 (Docs/Stages는 설계 문서 단계) -- OnStartPressed는 그 자리를 표시하는 TODO다.
+// 내용을 보여주고, "시작" 버튼은 GameFlowManager에 이 스테이지를 다음으로 틀어달라고
+// 요청만 한다 -- 실제 씬 전환은 여전히 로비 카운트다운이 끝나는 시점에
+// GameFlowManager.StartNextStage()가 전담한다.
 public class StageIntroUI : MonoBehaviour
 {
     public Text titleText;
@@ -11,6 +12,9 @@ public class StageIntroUI : MonoBehaviour
     public Text descriptionText;
     public Text themeTagText;
     public Text playerCountText;
+    public WorldMapUI worldMap;
+
+    private StageDefinition currentStage;
 
     public void Show(StageDefinition stage)
     {
@@ -21,6 +25,7 @@ public class StageIntroUI : MonoBehaviour
         }
 
         gameObject.SetActive(true);
+        currentStage = stage;
 
         if (titleText != null) titleText.text = stage.titleEn;
         if (subtitleText != null) subtitleText.text = stage.subtitleKr;
@@ -41,10 +46,16 @@ public class StageIntroUI : MonoBehaviour
         }
     }
 
-    // TODO: 실제 스테이지 게임플레이 로딩 -- Docs/Stages 설계 문서 구현 단계에서 연결.
+    // 아무도 이 버튼을 안 눌러도 로비는 예전처럼 순서대로 자동 진행된다 -- 이 요청은
+    // "다음 한 번만" 그 순서 위에 우선하는 제안일 뿐이라, 이미 검증된 자동 순환
+    // 흐름을 전혀 대체하지 않는다.
     public void OnStartPressed()
     {
-        string selected = titleText != null ? titleText.text : "(제목 미연결)";
-        Debug.Log($"[StageIntro] 스테이지 로딩 미구현 (설계 단계) -- 선택됨: {selected}");
+        if (currentStage != null && GameFlowManager.Instance != null && !string.IsNullOrEmpty(currentStage.sceneName))
+        {
+            GameFlowManager.Instance.RequestSelectStageServerRpc(currentStage.sceneName);
+        }
+
+        if (worldMap != null) worldMap.CloseMap();
     }
 }

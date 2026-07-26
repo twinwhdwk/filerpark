@@ -32,4 +32,19 @@ public class WorldMapUI : MonoBehaviour
         if (stageIntro != null) stageIntro.gameObject.SetActive(false);
         if (mapPanel != null) mapPanel.SetActive(true);
     }
+
+    // 이 컴포넌트가 붙은 오브젝트가 맵/인트로 전체를 감싸는 스크림이다 -- Open/Close는
+    // 그 스크림 자체를 켜고 끄고, ReturnToMap/ShowStage는 스크림이 이미 열려 있다고
+    // 가정하고 그 안의 맵 카드/인트로 카드끼리만 전환한다.
+    public void OpenMap()
+    {
+        gameObject.SetActive(true);
+        if (mapPanel != null) mapPanel.SetActive(true);
+        if (stageIntro != null) stageIntro.gameObject.SetActive(false);
+    }
+
+    public void CloseMap()
+    {
+        gameObject.SetActive(false);
+    }
 }

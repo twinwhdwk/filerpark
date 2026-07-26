@@ -235,8 +235,119 @@ public static class GameFlowSceneSetup
         scoreboardUI.headerText = scoreHeader;
         scoreboardUI.scoreText = scoreText;
 
+        BuildWorldMapUI(canvasObj.transform);
+
         EditorSceneManager.SaveScene(scene, LobbyScenePath);
         Debug.Log($"[FlowSetup] Lobby 씬 생성 완료: {LobbyScenePath}");
+    }
+
+    // 예전엔 Docs/Stages 설계 문서만 보여주는 미연결 프로토타입(Assets/scense/main.unity)
+    // 이었던 WorldMapUI/StageIntroUI/StageCatalog를 실제 Lobby 씬에 붙인다. "스테이지
+    // 선택" 버튼 -> 4개 스테이지 노드가 늘어선 맵 카드 -> 노드 클릭 시 상세 카드 ->
+    // "이 스테이지로 시작"을 누르면 GameFlowManager.RequestSelectStageServerRpc로
+    // 다음 스테이지를 예약한다. 아무도 안 누르면 예전처럼 순서대로 자동 진행되므로,
+    // 이미 5봇 테스트로 검증된 자동 순환 흐름은 전혀 바뀌지 않는다.
+    private static void BuildWorldMapUI(Transform canvasTransform)
+    {
+        StageCatalog catalog = AssetDatabase.LoadAssetAtPath<StageCatalog>("Assets/StageData/StageCatalog.asset");
+        if (catalog == null)
+        {
+            Debug.LogWarning("[FlowSetup] Assets/StageData/StageCatalog.asset을 찾을 수 없어 월드맵 UI를 건너뜁니다.");
+            return;
+        }
+
+        Button openMapButton = CreateMenuButton(canvasTransform, "OpenMapButton", new Vector2(0f, -460f), "스테이지 선택");
+
+        // 스크림 전체(WorldMapUI가 이 오브젝트에 붙는다) -- Open/Close가 이 오브젝트
+        // 자체를 켜고 끈다. 안쪽의 맵 카드/인트로 카드는 그 상태에서 서로만 전환된다.
+        GameObject overlayRoot = new GameObject("WorldMapOverlay");
+        overlayRoot.transform.SetParent(canvasTransform, false);
+        RectTransform overlayRect = overlayRoot.AddComponent<RectTransform>();
+        overlayRect.anchorMin = Vector2.zero;
+        overlayRect.anchorMax = Vector2.one;
+        overlayRect.offsetMin = Vector2.zero;
+        overlayRect.offsetMax = Vector2.zero;
+        Image overlayScrim = overlayRoot.AddComponent<Image>();
+        overlayScrim.sprite = NetworkSetupMenu.GetOrCreatePlaceholderSprite();
+        overlayScrim.color = new Color(0f, 0f, 0f, 0.55f);
+
+        WorldMapUI worldMap = overlayRoot.AddComponent<WorldMapUI>();
+        worldMap.catalog = catalog;
+
+        // 맵 카드 -- 4개 스테이지 노드를 가로로 나열.
+        GameObject mapCard = new GameObject("MapCard");
+        mapCard.transform.SetParent(overlayRoot.transform, false);
+        RectTransform mapCardRect = mapCard.AddComponent<RectTransform>();
+        mapCardRect.anchorMin = new Vector2(0.5f, 0.5f);
+        mapCardRect.anchorMax = new Vector2(0.5f, 0.5f);
+        mapCardRect.sizeDelta = new Vector2(1400f, 580f);
+        Image mapCardImage = mapCard.AddComponent<Image>();
+        mapCardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
+        mapCardImage.type = Image.Type.Sliced;
+
+        CreateLabel(mapCard.transform, "MapTitle", new Vector2(0.5f, 0.5f), new Vector2(0f, 230f), new Vector2(600f, 70f),
+            44, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold).text = "스테이지 선택";
+
+        float[] nodeXs = { -525f, -175f, 175f, 525f };
+        int nodeCount = catalog.stages != null ? Mathf.Min(4, catalog.stages.Length) : 0;
+        for (int i = 0; i < nodeCount; i++)
+        {
+            StageDefinition stage = catalog.stages[i];
+            Button nodeButton = CreateMenuButton(mapCard.transform, $"StageNode{i + 1}", new Vector2(nodeXs[i], 40f),
+                stage != null ? stage.titleEn : $"STAGE {i + 1}");
+            StageNodeButton nodeScript = nodeButton.gameObject.AddComponent<StageNodeButton>();
+            nodeScript.worldMap = worldMap;
+            nodeScript.stageIndex = i;
+            UnityEditor.Events.UnityEventTools.AddPersistentListener(nodeButton.onClick, nodeScript.NotifyClicked);
+        }
+
+        Button closeMapButton = CreateMenuButton(mapCard.transform, "CloseMapButton", new Vector2(0f, -230f), "닫기");
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(closeMapButton.onClick, worldMap.CloseMap);
+
+        // 인트로 카드 -- 노드를 클릭하면 맵 카드 대신 이게 뜬다.
+        GameObject introCard = new GameObject("StageIntroCard");
+        introCard.transform.SetParent(overlayRoot.transform, false);
+        RectTransform introCardRect = introCard.AddComponent<RectTransform>();
+        introCardRect.anchorMin = new Vector2(0.5f, 0.5f);
+        introCardRect.anchorMax = new Vector2(0.5f, 0.5f);
+        introCardRect.sizeDelta = new Vector2(900f, 580f);
+        Image introCardImage = introCard.AddComponent<Image>();
+        introCardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
+        introCardImage.type = Image.Type.Sliced;
+
+        Text introTitle = CreateLabel(introCard.transform, "IntroTitle", new Vector2(0.5f, 0.5f), new Vector2(0f, 230f), new Vector2(700f, 70f),
+            44, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold);
+        Text introSubtitle = CreateLabel(introCard.transform, "IntroSubtitle", new Vector2(0.5f, 0.5f), new Vector2(0f, 160f), new Vector2(700f, 50f),
+            28, UITheme.ColorIce, TextAnchor.MiddleCenter, bodyBoldFont, FontStyle.Bold);
+        Text introTheme = CreateLabel(introCard.transform, "IntroTheme", new Vector2(0.5f, 0.5f), new Vector2(0f, 100f), new Vector2(700f, 44f),
+            24, UITheme.ColorFg, TextAnchor.MiddleCenter, bodyMediumFont);
+        Text introPlayerCount = CreateLabel(introCard.transform, "IntroPlayerCount", new Vector2(0.5f, 0.5f), new Vector2(0f, 50f), new Vector2(700f, 40f),
+            22, UITheme.ColorFg, TextAnchor.MiddleCenter, bodyMediumFont);
+        Text introDescription = CreateLabel(introCard.transform, "IntroDescription", new Vector2(0.5f, 0.5f), new Vector2(0f, -60f), new Vector2(760f, 160f),
+            24, UITheme.ColorFg, TextAnchor.UpperLeft, bodyMediumFont);
+        introDescription.verticalOverflow = VerticalWrapMode.Overflow;
+
+        Button startButton = CreateMenuButton(introCard.transform, "StartStageButton", new Vector2(-170f, -240f), "이 스테이지로 시작");
+        Button backButton = CreateMenuButton(introCard.transform, "BackToMapButton", new Vector2(170f, -240f), "뒤로");
+
+        StageIntroUI stageIntro = introCard.AddComponent<StageIntroUI>();
+        stageIntro.titleText = introTitle;
+        stageIntro.subtitleText = introSubtitle;
+        stageIntro.descriptionText = introDescription;
+        stageIntro.themeTagText = introTheme;
+        stageIntro.playerCountText = introPlayerCount;
+        stageIntro.worldMap = worldMap;
+
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(startButton.onClick, stageIntro.OnStartPressed);
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(backButton.onClick, worldMap.ReturnToMap);
+
+        worldMap.mapPanel = mapCard;
+        worldMap.stageIntro = stageIntro;
+
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(openMapButton.onClick, worldMap.OpenMap);
+
+        introCard.SetActive(false);
+        overlayRoot.SetActive(false);
     }
 
     [MenuItem("Tools/Coop Setup/Multiplayer Flow/3. Create Stage01 Scene")]

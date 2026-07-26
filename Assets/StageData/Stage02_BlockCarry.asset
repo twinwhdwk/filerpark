@@ -22,4 +22,4 @@ MonoBehaviour:
   theme: 1
   minPlayers: 4
   maxPlayers: 6
-  sceneName: 
+  sceneName: Stage02_BlockCarry

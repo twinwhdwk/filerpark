@@ -23,4 +23,4 @@ MonoBehaviour:
   theme: 0
   minPlayers: 4
   maxPlayers: 6
-  sceneName: 
+  sceneName: Stage01_Gatekeeper

@@ -46,6 +46,14 @@ public class GameFlowManager : NetworkBehaviour
     public readonly NetworkVariable<float> lobbyCountdownRemaining = new NetworkVariable<float>(
         0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    // 로비의 월드맵 UI에서 플레이어가 직접 스테이지를 고르면 이 값이 채워진다(-1=미선택).
+    // 아무도 안 고르면 예전처럼 순서대로 자동 진행되므로, 이 기능이 없어도 이미 검증된
+    // 자동 순환 흐름은 그대로 동작한다 -- StartNextStage()의 순서 로직 위에 "다음 한
+    // 번만" 우선하는 선택을 얹을 뿐이다.
+    public readonly NetworkVariable<int> selectedStageIndexPreview = new NetworkVariable<int>(
+        -1, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private int pendingSelectedStageIndex = -1;
+
     private readonly Dictionary<ulong, int> scores = new Dictionary<ulong, int>();
 
     private bool lobbySceneLoaded;
@@ -190,6 +198,31 @@ public class GameFlowManager : NetworkBehaviour
         }
     }
 
+    // 월드맵 UI(Lobby 씬의 WorldMapUI/StageIntroUI)에서 스테이지 카드의 "시작" 버튼을
+    // 누르면 호출된다. 실제 로드는 여기서 하지 않는다 -- 로비 카운트다운이 끝나는
+    // 시점에 StartNextStage()가 이 값을 읽어가도록 예약만 해둔다. RequireOwnership을
+    // false로 둔 이유는 아무 접속 클라이언트나(호스트가 아니어도) 다음 스테이지를
+    // 제안할 수 있게 하기 위함 -- 소규모 친구 파티 게임이라 악의적 요청을 걱정할
+    // 필요가 없다.
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestSelectStageServerRpc(string sceneName, ServerRpcParams rpcParams = default)
+    {
+        if (phase.Value != GamePhase.Lobby) return;
+
+        for (int i = 0; i < stageSceneNames.Length; i++)
+        {
+            if (stageSceneNames[i] == sceneName)
+            {
+                pendingSelectedStageIndex = i;
+                selectedStageIndexPreview.Value = i;
+                Debug.Log($"[GameFlow] 플레이어가 다음 스테이지로 {sceneName}을 선택했습니다.");
+                return;
+            }
+        }
+
+        Debug.LogWarning($"[GameFlow] 알 수 없는 스테이지 선택 요청: {sceneName}");
+    }
+
     private void StartNextStage()
     {
         if (stageSceneNames.Length == 0)
@@ -198,11 +231,21 @@ public class GameFlowManager : NetworkBehaviour
             return;
         }
 
-        int nextIndex = currentStageIndex.Value + 1;
-        if (nextIndex >= stageSceneNames.Length)
+        int nextIndex;
+        if (pendingSelectedStageIndex >= 0 && pendingSelectedStageIndex < stageSceneNames.Length)
         {
-            nextIndex = 0;
+            nextIndex = pendingSelectedStageIndex;
         }
+        else
+        {
+            nextIndex = currentStageIndex.Value + 1;
+            if (nextIndex >= stageSceneNames.Length)
+            {
+                nextIndex = 0;
+            }
+        }
+        pendingSelectedStageIndex = -1;
+        selectedStageIndexPreview.Value = -1;
 
         currentStageIndex.Value = nextIndex;
         phase.Value = GamePhase.InStage;

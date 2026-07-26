@@ -18,6 +18,7 @@ public class LobbyUI : MonoBehaviour
     private int lastConnected = -1;
     private int lastCountdownWhole = int.MinValue;
     private int lastState = -1; // 0=카운트다운 중, 1=곧 시작, 2=대기 중
+    private bool lastHasSelection;
 
     private void Awake()
     {
@@ -38,19 +39,25 @@ public class LobbyUI : MonoBehaviour
         float countdown = GameFlowManager.Instance.lobbyCountdownRemaining.Value;
         int countdownWhole = Mathf.RoundToInt(countdown);
         int state = countdown > 0f ? 0 : (connected >= minPlayers ? 1 : 2);
+        bool hasSelection = GameFlowManager.Instance.selectedStageIndexPreview.Value >= 0;
 
-        if (connected == lastConnected && countdownWhole == lastCountdownWhole && state == lastState)
+        if (connected == lastConnected && countdownWhole == lastCountdownWhole && state == lastState && hasSelection == lastHasSelection)
         {
             return;
         }
         lastConnected = connected;
         lastCountdownWhole = countdownWhole;
         lastState = state;
+        lastHasSelection = hasSelection;
 
-        statusText.text = state == 0
+        string baseText = state == 0
             ? $"접속 인원 <color=#{primaryHex}><b>{connected}</b></color>명\n<color=#{iceHex}><size=64><b>{countdownWhole}</b></size></color>초 후 스테이지 시작"
             : state == 1
                 ? $"접속 인원 <color=#{primaryHex}><b>{connected}</b></color>명\n곧 시작합니다..."
                 : $"접속 인원 <color=#{primaryHex}><b>{connected}</b></color>명\n{minPlayers}명이 모이면 자동으로 시작됩니다";
+
+        statusText.text = hasSelection
+            ? baseText + $"\n<color=#{iceHex}>다음 스테이지가 선택되었습니다</color>"
+            : baseText;
     }
 }
