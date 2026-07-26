@@ -57,13 +57,33 @@ public class BotController : NetworkBehaviour
     private GameObject[] players;
     private float nextPickupRequest;
 
-    // "막힘 감지" 점프: 가로로 가려는데 위치가 안 바뀌면(작은 턱에 걸림) 점프한다.
-    // 랜덤 점프와 달리 실제로 막혔을 때만 발동하므로 다리/시소에서 헛점프로
-    // 떨어지는 일이 없다. 밀기처럼 "일부러 눌러 붙어 정지"하는 상황엔 끄고, 시소
-    // 횡단처럼 턱을 넘어야 하는 상황에서만 켠다(unstickEnabled).
-    private bool unstickEnabled;
-    private float unstickLastX;
-    private float unstickStuckTime;
+    // ---- 범용 이동 회복(막힘 탈출) 레이어 ----
+    // 스테이지별로 일일이 켜고 끄던 예전 "막힘 점프"를 대체한다. 기본적으로 항상 켜져
+    // 있고(전 스테이지 공통), "가로로 가려는데(입력 있음) 목표 방향으로 순수 전진이
+    // 일정 시간 이상 없으면" 끼인 것으로 보고 회복 기동을 실행한다. 특정 상황(밀기
+    // 대형처럼 일부러 눌러 붙어 정지해야 하는 곳)에서만 recoverySuppressed로 끈다 --
+    // opt-in이 아니라 opt-out이라, 새 스테이지 코드가 "켜는 걸 잊어" 소프트락되는
+    // 예전 구조적 실패가 원천적으로 사라진다.
+    //
+    // 정체 판정은 "기준점 대비 순진행량"으로 한다. 예전 방식은 매 프레임 위치 델타(0.05)를
+    // 봐서, 서버 권위 위치가 실제로 멈췄어도 NetworkTransform 보간의 좌우 지터만으로
+    // 타이머가 매 프레임 리셋돼 점프가 영영 발동하지 않는 구조적 결함이 있었다.
+    private const float ProgressEpsilon = 0.3f;   // 이만큼 순전진하면 "진행 중"으로 본다
+    private const float StuckDelay = 0.6f;        // 순전진 없이 이 시간 지나면 끼임 확정
+    private const float BaseBackupDur = 0.25f;    // 첫 회복 기동의 후퇴 시간
+    private const float BackupPerAttempt = 0.12f; // 시도가 반복될수록 후퇴 시간을 늘림
+    private const float MaxBackupDur = 0.75f;
+    private const float ForwardDur = 0.55f;       // 후퇴 후 도움닫기 전진 시간
+
+    private bool recoverySuppressed;
+    private float progressAnchorX;
+    private float lastProgressTime;
+    private float lastDesiredDir;
+    private bool recoveryActive;
+    private float recoveryStartTime;
+    private int recoveryAttempts;
+    private bool recoveryBackupJumped;
+    private bool recoveryForwardJumped;
 
     public override void OnNetworkSpawn()
     {
@@ -77,7 +97,8 @@ public class BotController : NetworkBehaviour
         if (!enabled) return;
 
         spawnPosition = transform.position;
-        unstickLastX = transform.position.x;
+        progressAnchorX = transform.position.x;
+        lastProgressTime = Time.time;
         ScheduleNextJump();
     }
 
@@ -154,7 +175,7 @@ public class BotController : NetworkBehaviour
     {
         RefreshStageRefs();
         players = GameObject.FindGameObjectsWithTag("Player");
-        unstickEnabled = false;
+        recoverySuppressed = false;
 
         // 판별 순서는 각 스테이지가 가진 "고유" 기믹 기준. 4개 스테이지는 서로
         // 겹치는 기믹이 없어 이 순서로 정확히 하나만 매칭된다.
@@ -165,7 +186,7 @@ public class BotController : NetworkBehaviour
         else if (goal != null) MoveToward(goal.transform.position.x); // 기믹 없는 골 전용 씬: 그냥 골로 모인다
         else UpdatePatrol();
 
-        UpdateUnstickJump();
+        ApplyLocomotionRecovery();
     }
 
     private void RefreshStageRefs()
@@ -211,14 +232,28 @@ public class BotController : NetworkBehaviour
     // 솔루션: 전원이 블록을 목표 방향으로 민다(요구 인원 게이팅은 서버가 검증). 블록이
     // 구덩이를 잇는 다리가 되면(isInPlace) 전원이 그 위를 건너 골로 간다. 특정 봇만
     // 밀게 배정하면 한 명만 타이밍이 어긋나도 영영 정체되므로 전원 밀기로 단일 실패점을
-    // 없앤다. 이 스테이지는 바닥과 블록 윗면이 평평(flush)해 점프가 필요 없다.
+    // 없앤다. 바닥과 블록 윗면은 평평(flush)해 평상시엔 점프가 필요 없지만, 이음매
+    // 콜라이더 코너에 끼는 경우가 있어 그건 범용 회복 레이어가 자동으로 처리한다.
     private void UpdateBlockPush()
     {
-        if (block.isInPlace.Value)
+        bool inPlace = block.isInPlace.Value;
+
+        if (inPlace)
         {
+            // 다리(블록)가 놓인 뒤 골로 걸어가는 구간. 블록/바닥 이음매(콜라이더 코너)에
+            // 봇이 끼는 경우가 있는데, 이 구간은 회복 레이어를 기본값(켜짐) 그대로 둬서
+            // 끼면 자동으로 후퇴+도움닫기로 빠져나온다. 블록을 Ground 레이어로 둔 덕에
+            // 블록 위에서도 점프가 서버 검증(groundCheck)을 통과한다 -- 예전엔 블록이
+            // Ground가 아니라 그 위에서의 점프 요청이 서버에서 조용히 거부돼, 이 이음매
+            // 끼임에 점프가 무력했던 것이 5봇 테스트에서 영구 정체를 만든 근본 원인이었다.
             MoveTowardGoal();
             return;
         }
+
+        // 미는 단계: 전원이 목표 방향으로 블록을 민다. 일부러 블록에 눌러 붙어 정지하는
+        // 대형이라 위치가 안 변하는 게 정상 -- 여기서 회복이 발동하면 후퇴/점프로 대형이
+        // 흐트러져 요구 인원 게이팅이 풀리지 않으므로 이 구간만 회복을 끈다(유일한 opt-out).
+        recoverySuppressed = true;
 
         if (block.targetPoint == null)
         {
@@ -307,8 +342,8 @@ public class BotController : NetworkBehaviour
     // 독립 프로세스인 봇들끼리 합의 없이도 |좌−우| ≤ 1을 유지시켜 시소를 수평으로 만든다.
     private void CrossSeesawBalanced(float seesawX)
     {
-        unstickEnabled = true; // 시소 윗면 턱을 만나면 막힘 점프로 넘는다
-
+        // 회복 레이어가 기본으로 켜져 있어, 시소 윗면 이음매에 끼면 자동으로 빠져나온다
+        // (시소도 Ground 레이어라 그 위에서 점프가 서버 검증을 통과한다).
         float myX = transform.position.x;
         float leftEdge = seesawX - SeesawHalf;
 
@@ -338,7 +373,6 @@ public class BotController : NetworkBehaviour
 
     private void CrossSeesawSolo(float seesawX)
     {
-        unstickEnabled = true;
         HorizontalInput = 1f; // 단독 횡단은 항상 균형(한 명뿐) -> 그냥 오른쪽으로
     }
 
@@ -376,6 +410,12 @@ public class BotController : NetworkBehaviour
 
     // ------------------------------------------------------------------ 공통 헬퍼
 
+    // 골로 모일 때 전원이 "골 중심 한 점"으로 수렴하지 않고 rank별로 골존 안에 흩어진
+    // 슬롯에 자리잡게 한다. 5명이 좁은 골(폭 6)의 한 점에 몰리면 서로 몸으로 밀쳐
+    // (다이나믹 바디끼리 겹침 해소가 큰 임펄스를 만든다) 튕겨 오르내리며 (a) 골존의
+    // 세로 트리거 범위(높이 1.6) 밖으로 점프해 나갔다 들어왔다 반복해 "전원 동시 존재"가
+    // 성립하지 않고, (b) 그 속도 스파이크가 얇은 바닥을 관통시켜 낙사를 유발했다.
+    // rank로 폭을 나눠 서면 서로 겹치지 않아 조용히 골 안에 머문다 -> 클리어가 성립한다.
     private void MoveTowardGoal()
     {
         if (goal == null)
@@ -383,7 +423,50 @@ public class BotController : NetworkBehaviour
             HorizontalInput = 0f;
             return;
         }
-        MoveToward(goal.transform.position.x);
+
+        float goalX = goal.transform.position.x;
+        float inner = Mathf.Max(0.4f, GoalHalfWidth() - 0.8f); // 가장자리에서 살짝 안쪽까지만 사용
+        int n = Mathf.Max(1, players.Length);
+        int rank = Mathf.Clamp(GetMyRank(), 0, n - 1);
+        float frac = (n <= 1) ? 0.5f : (float)rank / (n - 1); // 0..1
+        float slotX = goalX - inner + frac * (2f * inner);
+
+        MoveToward(slotX);
+    }
+
+    // 골존 트리거의 월드 반폭. 스테이지마다 다르므로(넓은 S1, 좁은 S2~4) 콜라이더에서 읽는다.
+    private float GoalHalfWidth()
+    {
+        if (goal == null) return 3f;
+        BoxCollider2D col = goal.GetComponent<BoxCollider2D>();
+        if (col == null) return 3f;
+        return Mathf.Abs(col.size.x * goal.transform.lossyScale.x) * 0.5f;
+    }
+
+    // 이미 골존 안(가로 기준)에 들어와 있는가. 들어와 있으면 위치는 충분히 좋으므로
+    // 회복 기동을 걸 필요가 없다.
+    private bool IsInsideGoalZone()
+    {
+        if (goal == null) return false;
+        return Mathf.Abs(transform.position.x - goal.transform.position.x) <= GoalHalfWidth();
+    }
+
+    // 진행 방향으로 몸 하나 거리 안에 다른 플레이어가 밀착해 있는가(= 지형이 아니라
+    // 팀원 혼잡에 막힌 것). 진행 방향 앞쪽, 대략 같은 높이의 팀원만 본다.
+    private bool TeammateDirectlyAhead(float dir)
+    {
+        float myX = transform.position.x;
+        float myY = transform.position.y;
+        foreach (GameObject p in players)
+        {
+            if (p == gameObject) continue;
+            float dx = p.transform.position.x - myX;
+            if (dx * dir <= 0f) continue;                              // 앞쪽만
+            if (Mathf.Abs(dx) > 1.1f) continue;                        // 몸 하나 거리 안(밀착)만
+            if (Mathf.Abs(p.transform.position.y - myY) > 1.2f) continue; // 대략 같은 높이만
+            return true;
+        }
+        return false;
     }
 
     private void MoveToward(float targetX)
@@ -415,30 +498,101 @@ public class BotController : NetworkBehaviour
         return true;
     }
 
-    private void UpdateUnstickJump()
+    // 스테이지 로직이 정한 목표 이동 입력(HorizontalInput)을 후처리해, 실제로 끼였을 때만
+    // 범용 회복 기동으로 덮어쓴다. 모든 스테이지가 공유하는 단일 이동 회복 레이어 --
+    // "어디로 가려 하는가"(스테이지 의도)와 "실제로 어떻게 빠져나가는가"(이 레이어)를 분리한다.
+    private void ApplyLocomotionRecovery()
     {
-        // 가로로 가려는데(입력 있음) 위치가 거의 안 변하면 작은 턱에 걸린 것 -> 점프.
-        // 켜진 상황(시소 횡단)에서만 동작하고, 밀기/대기 등에는 꺼져 있어 헛점프가 없다.
-        if (!unstickEnabled || Mathf.Abs(HorizontalInput) < 0.5f)
+        float desired = HorizontalInput;
+        float myX = transform.position.x;
+
+        // 이동 의사가 없거나(대기/도착으로 입력 0) 회복이 억제된 구간(밀기 대형)이면
+        // 회복을 끄고 진행도 추적만 리셋한다.
+        if (recoverySuppressed || Mathf.Abs(desired) < 0.5f)
         {
-            unstickStuckTime = 0f;
-            unstickLastX = transform.position.x;
+            progressAnchorX = myX;
+            lastProgressTime = Time.time;
+            recoveryActive = false;
+            recoveryAttempts = 0;
+            lastDesiredDir = 0f;
             return;
         }
 
-        if (Mathf.Abs(transform.position.x - unstickLastX) > 0.05f)
+        float dir = Mathf.Sign(desired);
+
+        // 목표 방향이 바뀌면 기준점을 다시 잡는다(방향 전환은 정체가 아니다).
+        if (dir != lastDesiredDir)
         {
-            unstickStuckTime = 0f;
-            unstickLastX = transform.position.x;
+            lastDesiredDir = dir;
+            progressAnchorX = myX;
+            lastProgressTime = Time.time;
+            recoveryActive = false;
+            recoveryAttempts = 0;
+        }
+
+        // 의도한 방향으로 ProgressEpsilon 이상 순전진했으면 정상 진행 -> 타이머/회복 리셋.
+        // 기준점 대비 "순진행량"이라 보간이 좌우로 흔들려도(지터) 리셋되지 않는다.
+        if ((myX - progressAnchorX) * dir >= ProgressEpsilon)
+        {
+            progressAnchorX = myX;
+            lastProgressTime = Time.time;
+            recoveryActive = false;
+            recoveryAttempts = 0;
             return;
         }
 
-        unstickStuckTime += Time.deltaTime;
-        if (unstickStuckTime >= 0.35f)
+        // 정적 지오메트리 끼임이 아닌 "가짜 정체"에는 회복 기동(후퇴+점프)을 하지 않는다.
+        //  (1) 이미 골존 안이면 위치가 충분히 좋아 언스틱이 필요 없다(골 판정은 존 안에
+        //      "있는가"이지 정확한 중심 도달이 아니다).
+        //  (2) 진행 방향에 팀원이 몸 하나 거리로 밀착해 있으면 지형이 아니라 "동적 팀원
+        //      혼잡"이다 -- 점프로는 애초에 안 풀리고, 밀집한 다이나믹 바디들 사이에 큰
+        //      충돌 임펄스를 만들어 오히려 튕겨나가(→ 얇은 바닥 관통 낙사) 상황을 악화시킨다.
+        // 이 경우 정체 타이머만 눌러두고 정상 입력을 유지한다(혼잡은 팀원이 자리잡으면 풀린다).
+        if (IsInsideGoalZone() || TeammateDirectlyAhead(dir))
         {
-            JumpRequested = true;
-            unstickStuckTime = 0f;
-            unstickLastX = transform.position.x;
+            progressAnchorX = myX;
+            lastProgressTime = Time.time;
+            recoveryActive = false;
+            recoveryAttempts = 0;
+            return;
+        }
+
+        if (!recoveryActive)
+        {
+            if (Time.time - lastProgressTime < StuckDelay) return; // 아직 정체 전 -> 정상 이동 유지
+            recoveryActive = true;
+            recoveryStartTime = Time.time;
+            recoveryBackupJumped = false;
+            recoveryForwardJumped = false;
+            recoveryAttempts++;
+        }
+
+        // 회복 기동: (1) 진행 방향의 반대로 잠깐 물러나며 점프해 끼임면에서 떨어진 뒤
+        // (2) 도움닫기로 다시 전진+점프해 코너/턱을 넘는다. 시도가 반복될수록 후퇴 시간을
+        // 키워(BackupPerAttempt) 어떤 이음매에서도 결국 빠져나오게 한다 -- 단발 점프로는
+        // 못 넘는 "평평한 수직 코너 끼임"까지 포함해 영구 소프트락을 원천 차단한다.
+        // 후퇴는 대개 Ground 위(좌측 바닥/블록)로 물러나는 것이라, 뒤이은 도움닫기 점프가
+        // 발판(grounded)을 확보한 상태에서 발동해 서버 검증을 통과한다.
+        float backupDur = Mathf.Min(BaseBackupDur + BackupPerAttempt * (recoveryAttempts - 1), MaxBackupDur);
+        float t = Time.time - recoveryStartTime;
+
+        if (t < backupDur)
+        {
+            HorizontalInput = -dir; // 끼임면에서 후퇴
+            if (!recoveryBackupJumped) { JumpRequested = true; recoveryBackupJumped = true; }
+        }
+        else if (t < backupDur + ForwardDur)
+        {
+            HorizontalInput = dir; // 도움닫기 전진
+            if (!recoveryForwardJumped) { JumpRequested = true; recoveryForwardJumped = true; }
+        }
+        else
+        {
+            // 기동 종료 -> 재평가. 빠져나왔으면 다음 프레임 진행도 판정이 통과되고,
+            // 아직 막혀 있으면 StuckDelay 뒤 더 큰 후퇴로 다음 기동이 발동한다.
+            recoveryActive = false;
+            progressAnchorX = myX;
+            lastProgressTime = Time.time;
         }
     }
 

@@ -415,6 +415,14 @@ public static class GameFlowSceneSetup
         block.transform.position = new Vector3(16f, -3.0f, 0f);
         block.AddComponent<SpriteRenderer>();
         ApplySlicedSprite(block, badgeSprite, new Vector2(5f, 1f));
+        // Kinematic Rigidbody2D 필수 -- 이거 없이 transform.position을 직접 바꾸면
+        // Unity 2D 물리 엔진이 이 콜라이더를 "정적"으로 취급해서, 옆에 붙어 미는
+        // 플레이어(다이나믹 바디)와의 충돌 해석이 어긋난다. 5봇 테스트에서 실제로
+        // 밀던 인원이 3명을 채워 블록이 일부 움직이다가, 그 다음부터 겹침이 0으로
+        // 고정되고 다시는 회복되지 않는 걸 확인했다(PushableBlockNGO 주석 참고).
+        Rigidbody2D blockRb = block.AddComponent<Rigidbody2D>();
+        blockRb.bodyType = RigidbodyType2D.Kinematic;
+        blockRb.gravityScale = 0f;
         BoxCollider2D blockSolid = block.AddComponent<BoxCollider2D>();
         blockSolid.size = new Vector2(5f, 1f);
         // 트리거를 솔리드 콜라이더보다 "미는 반대편(왼쪽)"으로만 훨씬 크게 잡는다
@@ -431,6 +439,14 @@ public static class GameFlowSceneSetup
         block.AddComponent<NetworkTransform>();
         PushableBlockNGO blockScript = block.AddComponent<PushableBlockNGO>();
         blockScript.targetPoint = targetMarker.transform;
+        // 블록 윗면은 봇이 다리로 밟고 건너는 "바닥"이다 -> Ground 레이어로 둬야 그 위에
+        // 선 봇의 groundCheck(서버 점프 검증)가 걸려 점프가 통과한다. 이게 없으면 블록
+        // 위에서의 점프가 서버에서 조용히 거부돼, 블록/바닥 이음매 끼임을 점프로 넘지
+        // 못하고 봇 한 명이 영구 정체 -> 전원 동시 도달 조건이 영영 안 맞았다(5봇 테스트
+        // 근본 원인). Ground×Player 충돌 매트릭스는 이미 켜져 있어(좌우 바닥과 동일)
+        // 밀기/서기 물리와 트리거 겹침 카운트는 그대로다.
+        int blockGroundLayer = LayerMask.NameToLayer("Ground");
+        if (blockGroundLayer >= 0) block.layer = blockGroundLayer;
 
         GameObject goalZone = new GameObject("GoalZone1");
         goalZone.transform.position = new Vector3(31f, -2.2f, 0f);
@@ -512,6 +528,11 @@ public static class GameFlowSceneSetup
         seesaw.AddComponent<NetworkObject>();
         seesaw.AddComponent<NetworkTransform>();
         SeesawPlatformNGO seesawScript = seesaw.AddComponent<SeesawPlatformNGO>();
+        // 시소 윗면도 봇이 밟고 건너는 바닥 -> Ground 레이어(그 위에서 점프가 서버 검증을
+        // 통과하도록). 아래에서 만드는 좌/우 판정용 자식 트리거(SeesawSideZone)는 레이어를
+        // 상속하지 않으므로 기본 레이어 그대로 남아 인원 카운트에는 영향이 없다.
+        int seesawGroundLayer = LayerMask.NameToLayer("Ground");
+        if (seesawGroundLayer >= 0) seesaw.layer = seesawGroundLayer;
 
         GameObject leftZone = new GameObject("SeesawLeftZone");
         leftZone.transform.SetParent(seesaw.transform, false);
