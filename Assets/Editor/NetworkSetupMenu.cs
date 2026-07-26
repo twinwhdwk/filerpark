@@ -114,6 +114,39 @@ public static class NetworkSetupMenu
         go.AddComponent<PlayerColorNGO>();
         go.AddComponent<BotController>();
 
+        // 머리 위 "P1"/"P2" 번호표 -- 색만으로는 구분하기 어려운 상황(작은 화면, 색약
+        // 등)에서도 누가 누군지 바로 알아보게 한다. World Space 캔버스라 스케일을
+        // 아주 작게(0.01) 잡아야 RectTransform의 UI 단위(수백)가 월드 유닛 몇 개로
+        // 줄어든다.
+        GameObject labelCanvasObj = new GameObject("NameLabelCanvas");
+        labelCanvasObj.transform.SetParent(go.transform, false);
+        labelCanvasObj.transform.localPosition = new Vector3(0f, 0.85f, 0f);
+        labelCanvasObj.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+        Canvas labelCanvas = labelCanvasObj.AddComponent<Canvas>();
+        labelCanvas.renderMode = RenderMode.WorldSpace;
+        RectTransform labelCanvasRect = labelCanvasObj.GetComponent<RectTransform>();
+        labelCanvasRect.sizeDelta = new Vector2(200f, 60f);
+
+        GameObject labelTextObj = new GameObject("NameLabelText");
+        labelTextObj.transform.SetParent(labelCanvasObj.transform, false);
+        RectTransform labelTextRect = labelTextObj.AddComponent<RectTransform>();
+        labelTextRect.anchorMin = Vector2.zero;
+        labelTextRect.anchorMax = Vector2.one;
+        labelTextRect.offsetMin = Vector2.zero;
+        labelTextRect.offsetMax = Vector2.zero;
+        Text labelText = labelTextObj.AddComponent<Text>();
+        labelText.font = AssetDatabase.LoadAssetAtPath<Font>(UITheme.FontBodyBoldPath);
+        labelText.fontSize = 40;
+        labelText.alignment = TextAnchor.MiddleCenter;
+        labelText.fontStyle = FontStyle.Bold;
+        labelText.color = Color.white;
+        Outline labelOutline = labelTextObj.AddComponent<Outline>();
+        labelOutline.effectColor = UITheme.ColorFg;
+        labelOutline.effectDistance = new Vector2(2f, -2f);
+
+        PlayerLabelNGO labelScript = go.AddComponent<PlayerLabelNGO>();
+        labelScript.label = labelText;
+
         GameObject groundCheck = new GameObject("groundCheck");
         groundCheck.transform.SetParent(go.transform);
         groundCheck.transform.localPosition = new Vector3(0f, -0.5f, 0f);
