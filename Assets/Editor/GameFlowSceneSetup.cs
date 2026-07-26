@@ -651,6 +651,71 @@ public static class GameFlowSceneSetup
         Debug.Log($"[FlowSetup] Stage04 씬 생성 완료: {Stage04ScenePath}");
     }
 
+    // 원래 Alteruna 템플릿의 기본 Unity 아이콘을 그대로 쓰고 있었다 -- 빌드된 .exe가
+    // 작업표시줄/탐색기에서 다른 아무 Unity 프로젝트와 똑같이 보이는 건 "완성된 상용
+    // 게임"이 아니라 "프로토타입"이라는 인상을 가장 먼저 준다. NetworkSetupMenu의
+    // 라운드 스프라이트 생성과 같은 방식(픽셀 단위 SDF 유사 거리 계산)으로, 플레이어
+    // 캐릭터 스프라이트와 톤을 맞춘(초록 채움 + 어두운 테두리 링 + 흰 눈 2개) 원형
+    // 배지 아이콘을 절차적으로 생성해 Standalone 빌드 타겟에 등록한다.
+    [MenuItem("Tools/Coop Setup/Branding/Generate App Icon")]
+    public static void GenerateAppIcon()
+    {
+        int[] sizes = PlayerSettings.GetIconSizesForTargetGroup(BuildTargetGroup.Standalone);
+        if (sizes == null || sizes.Length == 0) sizes = new[] { 256 };
+
+        Texture2D[] icons = new Texture2D[sizes.Length];
+        for (int i = 0; i < sizes.Length; i++)
+        {
+            icons[i] = DrawAppIconTexture(Mathf.Max(16, sizes[i]));
+        }
+
+        PlayerSettings.SetIconsForTargetGroup(BuildTargetGroup.Standalone, icons);
+        Debug.Log($"[FlowSetup] 앱 아이콘 {icons.Length}개 크기로 생성 완료 (Standalone).");
+    }
+
+    private static Texture2D DrawAppIconTexture(int size)
+    {
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        Color[] pixels = new Color[size * size];
+        Vector2 center = new Vector2(size / 2f, size / 2f);
+        float outerRadius = size * 0.47f;
+        float ringInnerRadius = size * 0.36f;
+        float eyeOffsetX = size * 0.13f;
+        float eyeOffsetY = size * 0.05f;
+        float eyeRadius = Mathf.Max(1f, size * 0.05f);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                Vector2 p = new Vector2(x + 0.5f, y + 0.5f);
+                float dist = Vector2.Distance(p, center);
+
+                Color color;
+                if (dist > outerRadius)
+                {
+                    color = new Color(0f, 0f, 0f, 0f);
+                }
+                else if (dist > ringInnerRadius)
+                {
+                    color = UITheme.ColorFg;
+                }
+                else
+                {
+                    bool leftEye = Vector2.Distance(p, center + new Vector2(-eyeOffsetX, eyeOffsetY)) < eyeRadius;
+                    bool rightEye = Vector2.Distance(p, center + new Vector2(eyeOffsetX, eyeOffsetY)) < eyeRadius;
+                    color = (leftEye || rightEye) ? UITheme.ColorWhite : UITheme.ColorPrimary;
+                }
+
+                pixels[y * size + x] = color;
+            }
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply();
+        return texture;
+    }
+
     [MenuItem("Tools/Coop Setup/Multiplayer Flow/4. Configure Build Settings Scenes")]
     public static void ConfigureBuildSettingsScenes()
     {
