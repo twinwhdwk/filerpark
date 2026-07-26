@@ -35,6 +35,7 @@ public class KeyDoorNGO : NetworkBehaviour
     {
         Debug.Log($"[KeyDoor] {gameObject.name} {(newValue ? "열림" : "닫힘")}");
         UpdateDoorVisuals(newValue);
+        AudioManager.Instance?.PlaySfx(newValue ? SfxId.DoorOpen : SfxId.DoorClose);
     }
 
     private void UpdateDoorVisuals(bool state)

@@ -47,6 +47,7 @@ public class CoopDoorNGO : NetworkBehaviour
     {
         Debug.Log($"[CoopDoor] {gameObject.name} {(newValue ? "열림" : "닫힘")}");
         UpdateDoorVisuals(newValue);
+        AudioManager.Instance?.PlaySfx(newValue ? SfxId.DoorOpen : SfxId.DoorClose);
     }
 
     // color-ice (#4dd6fa) -- CLAUDE.md UI Style Guide 색상 토큰. 닫힌 문은 불투명하게,

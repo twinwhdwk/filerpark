@@ -23,6 +23,7 @@ public class LobbyUI : MonoBehaviour
     {
         primaryHex = ColorUtility.ToHtmlStringRGB(UITheme.ColorPrimary);
         iceHex = ColorUtility.ToHtmlStringRGB(UITheme.ColorIce);
+        AudioManager.Instance?.PlayLobbyMusic();
     }
 
     private void Update()

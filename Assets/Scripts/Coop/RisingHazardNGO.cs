@@ -35,6 +35,15 @@ public class RisingHazardNGO : NetworkBehaviour
 
         Debug.Log($"[RisingHazard] {collision.name} 낙오 -- 스테이지 실패");
         if (stageManager != null) stageManager.NotifyFailure();
+        PlayFailSfxClientRpc();
+    }
+
+    // 실패 판정은 서버만 하는 트리거 이벤트라 NetworkVariable로 자연히 드러나지
+    // 않는다 -- PlayerMovementNGO의 점프 SFX와 동일한 이유로 ClientRpc를 쓴다.
+    [ClientRpc]
+    private void PlayFailSfxClientRpc()
+    {
+        AudioManager.Instance?.PlaySfx(SfxId.StageFail);
     }
 
     public void ResetHazard(Vector3 spawnPosition)

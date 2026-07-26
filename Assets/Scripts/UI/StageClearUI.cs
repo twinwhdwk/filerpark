@@ -35,7 +35,10 @@ public class StageClearUI : MonoBehaviour
 
     private void HandleStageCleared(bool previousValue, bool newValue)
     {
-        if (!newValue || clearBanner == null) return;
+        if (!newValue) return;
+
+        AudioManager.Instance?.PlaySfx(SfxId.StageClear);
+        if (clearBanner == null) return;
 
         clearBanner.SetActive(true);
         if (clearText != null)

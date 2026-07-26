@@ -20,6 +20,21 @@ public class CarryableKeyNGO : NetworkBehaviour
     public readonly NetworkVariable<ulong> carrierClientId = new NetworkVariable<ulong>(
         NoCarrier, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    public override void OnNetworkSpawn()
+    {
+        carrierClientId.OnValueChanged += OnCarrierChanged;
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        carrierClientId.OnValueChanged -= OnCarrierChanged;
+    }
+
+    private void OnCarrierChanged(ulong previousValue, ulong newValue)
+    {
+        AudioManager.Instance?.PlaySfx(newValue == NoCarrier ? SfxId.KeyDrop : SfxId.KeyPickup);
+    }
+
     [ServerRpc(RequireOwnership = false)]
     public void RequestPickupServerRpc(ServerRpcParams rpcParams = default)
     {

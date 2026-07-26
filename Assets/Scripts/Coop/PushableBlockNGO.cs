@@ -58,10 +58,21 @@ public class PushableBlockNGO : NetworkBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         rb.bodyType = RigidbodyType2D.Kinematic;
+        isInPlace.OnValueChanged += OnArrivedChanged;
 
         if (!IsServer) return;
         int connected = NetworkManager.Singleton.ConnectedClientsIds.Count;
         requiredPushers = Mathf.Max(1, Mathf.CeilToInt(connected * 0.6f));
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        isInPlace.OnValueChanged -= OnArrivedChanged;
+    }
+
+    private void OnArrivedChanged(bool previousValue, bool newValue)
+    {
+        if (newValue) AudioManager.Instance?.PlaySfx(SfxId.BlockArrive);
     }
 
     private void OnTriggerEnter2D(Collider2D collision)

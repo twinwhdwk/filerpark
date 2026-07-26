@@ -17,6 +17,7 @@ build_*.pid
 # Headless Editor/bot-simulation run logs (scratch output from -logFile, not build artifacts)
 bot*.log
 headless_*.log
+.buildlogs/
 
 # Rider/VSCode/VS
 .vs/

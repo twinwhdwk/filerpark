@@ -103,6 +103,14 @@ public static class GameFlowSceneSetup
 
         BuildConnectUI(nmObj);
 
+        // 오디오/일시정지/접속-끊김 UI -- 전부 Bootstrap 씬(절대 언로드 안 됨)에
+        // 배치해서 Lobby/Stage 어디서든 동일하게 동작한다.
+        GameObject audioManagerObj = new GameObject("AudioManager");
+        audioManagerObj.AddComponent<AudioManager>();
+
+        BuildPauseMenuUI();
+        BuildConnectionStatusUI();
+
         EditorSceneManager.SaveScene(scene, BootstrapScenePath);
         Debug.Log($"[FlowSetup] Bootstrap 씬 생성 완료: {BootstrapScenePath}");
     }
@@ -769,6 +777,254 @@ public static class GameFlowSceneSetup
         text.alignment = alignment;
         text.fontStyle = fontStyle;
         return text;
+    }
+
+    // 일시정지/설정/접속-끊김 오버레이가 공통으로 쓰는 배지형 버튼 -- ConnectButton과
+    // 동일한 UI_ButtonPrimary.png 스타일(초록 채움 + 흰 테두리)을 재사용한다.
+    private static Button CreateMenuButton(Transform parent, string name, Vector2 anchoredPosition, string label)
+    {
+        GameObject buttonObj = new GameObject(name);
+        buttonObj.transform.SetParent(parent, false);
+        RectTransform rect = buttonObj.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.sizeDelta = new Vector2(320f, 70f);
+        rect.anchoredPosition = anchoredPosition;
+
+        Image image = buttonObj.AddComponent<Image>();
+        image.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonPrimary.png", UITheme.ColorPrimary, UITheme.ColorWhite);
+        image.type = Image.Type.Sliced;
+
+        Button button = buttonObj.AddComponent<Button>();
+        button.targetGraphic = image;
+
+        Text text = CreateLabel(buttonObj.transform, "Label", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(320f, 70f),
+            28, UITheme.ColorWhite, TextAnchor.MiddleCenter, bodyBoldFont, FontStyle.Bold);
+        text.text = label;
+
+        return button;
+    }
+
+    // 표준 Unity UI Slider 계층(Background/Fill Area/Fill/Handle Slide Area/Handle)을
+    // 스타일 가이드 톤(초록 채움, 옅은 민트 트랙)으로 코드에서 조립한다 -- 인스펙터로
+    // 손으로 만드는 대신, 이 프로젝트의 다른 UI와 마찬가지로 전부 스크립트로 생성된다.
+    private static Slider CreateSlider(Transform parent, string name, Vector2 anchoredPosition, Vector2 size, float initialValue)
+    {
+        GameObject sliderObj = new GameObject(name);
+        sliderObj.transform.SetParent(parent, false);
+        RectTransform sliderRect = sliderObj.AddComponent<RectTransform>();
+        sliderRect.anchorMin = new Vector2(0.5f, 0.5f);
+        sliderRect.anchorMax = new Vector2(0.5f, 0.5f);
+        sliderRect.sizeDelta = size;
+        sliderRect.anchoredPosition = anchoredPosition;
+
+        Slider slider = sliderObj.AddComponent<Slider>();
+        slider.minValue = 0f;
+        slider.maxValue = 1f;
+        slider.direction = Slider.Direction.LeftToRight;
+
+        GameObject background = new GameObject("Background");
+        background.transform.SetParent(sliderObj.transform, false);
+        RectTransform bgRect = background.AddComponent<RectTransform>();
+        bgRect.anchorMin = new Vector2(0f, 0.2f);
+        bgRect.anchorMax = new Vector2(1f, 0.8f);
+        bgRect.offsetMin = Vector2.zero;
+        bgRect.offsetMax = Vector2.zero;
+        Image bgImage = background.AddComponent<Image>();
+        bgImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_SliderTrack.png", UITheme.ColorBgSecondary, UITheme.ColorFg, 12f, 3f);
+        bgImage.type = Image.Type.Sliced;
+
+        GameObject fillArea = new GameObject("Fill Area");
+        fillArea.transform.SetParent(sliderObj.transform, false);
+        RectTransform fillAreaRect = fillArea.AddComponent<RectTransform>();
+        fillAreaRect.anchorMin = new Vector2(0f, 0.2f);
+        fillAreaRect.anchorMax = new Vector2(1f, 0.8f);
+        fillAreaRect.offsetMin = new Vector2(6f, 0f);
+        fillAreaRect.offsetMax = new Vector2(-6f, 0f);
+
+        GameObject fill = new GameObject("Fill");
+        fill.transform.SetParent(fillArea.transform, false);
+        RectTransform fillRect = fill.AddComponent<RectTransform>();
+        fillRect.anchorMin = Vector2.zero;
+        fillRect.anchorMax = Vector2.one;
+        fillRect.offsetMin = Vector2.zero;
+        fillRect.offsetMax = Vector2.zero;
+        Image fillImage = fill.AddComponent<Image>();
+        fillImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_SliderFill.png", UITheme.ColorPrimary, UITheme.ColorPrimary, 12f, 0f);
+        fillImage.type = Image.Type.Sliced;
+
+        GameObject handleArea = new GameObject("Handle Slide Area");
+        handleArea.transform.SetParent(sliderObj.transform, false);
+        RectTransform handleAreaRect = handleArea.AddComponent<RectTransform>();
+        handleAreaRect.anchorMin = new Vector2(0f, 0f);
+        handleAreaRect.anchorMax = new Vector2(1f, 1f);
+        handleAreaRect.offsetMin = new Vector2(12f, 0f);
+        handleAreaRect.offsetMax = new Vector2(-12f, 0f);
+
+        GameObject handle = new GameObject("Handle");
+        handle.transform.SetParent(handleArea.transform, false);
+        RectTransform handleRect = handle.AddComponent<RectTransform>();
+        handleRect.sizeDelta = new Vector2(24f, size.y);
+        Image handleImage = handle.AddComponent<Image>();
+        handleImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_SliderHandle.png", UITheme.ColorWhite, UITheme.ColorFg, 10f, 3f);
+        handleImage.type = Image.Type.Sliced;
+
+        slider.fillRect = fillRect;
+        slider.handleRect = handleRect;
+        slider.targetGraphic = handleImage;
+        slider.SetValueWithoutNotify(initialValue);
+
+        return slider;
+    }
+
+    // ESC로 여는 일시정지 메뉴 + 설정 서브패널. Bootstrap 씬에 배치되어 Lobby/Stage
+    // 전환과 무관하게 항상 존재한다. 온라인 협동 게임이라 Time.timeScale은 건드리지
+    // 않는다 (PauseMenuUI.cs 헤더 주석 참고).
+    private static void BuildPauseMenuUI()
+    {
+        LoadThemeFonts();
+
+        GameObject canvasObj = new GameObject("PauseMenuCanvas");
+        Canvas canvas = canvasObj.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 100;
+        CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        canvasObj.AddComponent<GraphicRaycaster>();
+
+        PauseMenuUI pauseMenu = canvasObj.AddComponent<PauseMenuUI>();
+
+        GameObject pausePanel = new GameObject("PausePanel");
+        pausePanel.transform.SetParent(canvasObj.transform, false);
+        RectTransform pauseRect = pausePanel.AddComponent<RectTransform>();
+        pauseRect.anchorMin = Vector2.zero;
+        pauseRect.anchorMax = Vector2.one;
+        pauseRect.offsetMin = Vector2.zero;
+        pauseRect.offsetMax = Vector2.zero;
+        Image scrim = pausePanel.AddComponent<Image>();
+        scrim.sprite = NetworkSetupMenu.GetOrCreatePlaceholderSprite();
+        // 반투명 검정 스크림 -- 밝은 UI Style Guide의 유일한 예외(hazard 빨간색과
+        // 같은 성격): 모달 포커스를 위한 어두운 오버레이는 브랜드 팔레트와 무관하다.
+        scrim.color = new Color(0f, 0f, 0f, 0.55f);
+
+        GameObject card = new GameObject("Card");
+        card.transform.SetParent(pausePanel.transform, false);
+        RectTransform cardRect = card.AddComponent<RectTransform>();
+        cardRect.anchorMin = new Vector2(0.5f, 0.5f);
+        cardRect.anchorMax = new Vector2(0.5f, 0.5f);
+        cardRect.sizeDelta = new Vector2(480f, 460f);
+        Image cardImage = card.AddComponent<Image>();
+        cardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
+        cardImage.type = Image.Type.Sliced;
+
+        CreateLabel(card.transform, "PauseTitle", new Vector2(0.5f, 0.5f), new Vector2(0f, 170f), new Vector2(400f, 60f),
+            40, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold).text = "일시정지";
+
+        Button resumeButton = CreateMenuButton(card.transform, "ResumeButton", new Vector2(0f, 70f), "계속하기");
+        Button settingsButton = CreateMenuButton(card.transform, "SettingsButton", new Vector2(0f, -20f), "설정");
+        Button quitButton = CreateMenuButton(card.transform, "QuitButton", new Vector2(0f, -110f), "게임 종료");
+
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(resumeButton.onClick, pauseMenu.OnResumeClicked);
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(settingsButton.onClick, pauseMenu.OnSettingsClicked);
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(quitButton.onClick, pauseMenu.OnQuitClicked);
+
+        // 설정 서브패널 -- 같은 스크림 위, Pause 카드와 같은 자리에 겹쳐 뜬다.
+        GameObject settingsPanel = new GameObject("SettingsPanel");
+        settingsPanel.transform.SetParent(pausePanel.transform, false);
+        RectTransform settingsRect = settingsPanel.AddComponent<RectTransform>();
+        settingsRect.anchorMin = new Vector2(0.5f, 0.5f);
+        settingsRect.anchorMax = new Vector2(0.5f, 0.5f);
+        settingsRect.sizeDelta = new Vector2(480f, 460f);
+        Image settingsImage = settingsPanel.AddComponent<Image>();
+        settingsImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
+        settingsImage.type = Image.Type.Sliced;
+
+        CreateLabel(settingsPanel.transform, "SettingsTitle", new Vector2(0.5f, 0.5f), new Vector2(0f, 170f), new Vector2(400f, 60f),
+            40, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold).text = "설정";
+
+        CreateLabel(settingsPanel.transform, "MasterLabel", new Vector2(0.5f, 0.5f), new Vector2(-140f, 90f), new Vector2(200f, 36f),
+            24, UITheme.ColorFg, TextAnchor.MiddleLeft, bodyMediumFont).text = "전체 음량";
+        Slider masterSlider = CreateSlider(settingsPanel.transform, "MasterSlider", new Vector2(100f, 90f), new Vector2(220f, 24f), 1f);
+
+        CreateLabel(settingsPanel.transform, "MusicLabel", new Vector2(0.5f, 0.5f), new Vector2(-140f, 20f), new Vector2(200f, 36f),
+            24, UITheme.ColorFg, TextAnchor.MiddleLeft, bodyMediumFont).text = "음악";
+        Slider musicSlider = CreateSlider(settingsPanel.transform, "MusicSlider", new Vector2(100f, 20f), new Vector2(220f, 24f), 0.5f);
+
+        CreateLabel(settingsPanel.transform, "SfxLabel", new Vector2(0.5f, 0.5f), new Vector2(-140f, -50f), new Vector2(200f, 36f),
+            24, UITheme.ColorFg, TextAnchor.MiddleLeft, bodyMediumFont).text = "효과음";
+        Slider sfxSlider = CreateSlider(settingsPanel.transform, "SfxSlider", new Vector2(100f, -50f), new Vector2(220f, 24f), 0.8f);
+
+        Button backButton = CreateMenuButton(settingsPanel.transform, "BackButton", new Vector2(0f, -170f), "뒤로");
+
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(backButton.onClick, pauseMenu.CloseSettings);
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(masterSlider.onValueChanged, pauseMenu.OnMasterVolumeChanged);
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(musicSlider.onValueChanged, pauseMenu.OnMusicVolumeChanged);
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(sfxSlider.onValueChanged, pauseMenu.OnSfxVolumeChanged);
+
+        settingsPanel.SetActive(false);
+        pauseMenu.pausePanel = pausePanel;
+        pauseMenu.settingsPanel = settingsPanel;
+        pauseMenu.masterSlider = masterSlider;
+        pauseMenu.musicSlider = musicSlider;
+        pauseMenu.sfxSlider = sfxSlider;
+
+        pausePanel.SetActive(false);
+    }
+
+    // 의도치 않은 접속 끊김(서버 다운/네트워크 문제)을 알려주는 전체 화면 오버레이.
+    // sortingOrder를 일시정지 메뉴보다 높여서, 일시정지가 열려 있는 도중에 끊겨도
+    // 이 오버레이가 항상 위에 뜬다.
+    private static void BuildConnectionStatusUI()
+    {
+        LoadThemeFonts();
+
+        GameObject canvasObj = new GameObject("ConnectionStatusCanvas");
+        Canvas canvas = canvasObj.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 200;
+        CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        canvasObj.AddComponent<GraphicRaycaster>();
+
+        ConnectionStatusUI statusUI = canvasObj.AddComponent<ConnectionStatusUI>();
+
+        GameObject overlayPanel = new GameObject("OverlayPanel");
+        overlayPanel.transform.SetParent(canvasObj.transform, false);
+        RectTransform overlayRect = overlayPanel.AddComponent<RectTransform>();
+        overlayRect.anchorMin = Vector2.zero;
+        overlayRect.anchorMax = Vector2.one;
+        overlayRect.offsetMin = Vector2.zero;
+        overlayRect.offsetMax = Vector2.zero;
+        Image scrim = overlayPanel.AddComponent<Image>();
+        scrim.sprite = NetworkSetupMenu.GetOrCreatePlaceholderSprite();
+        scrim.color = new Color(0f, 0f, 0f, 0.7f);
+
+        GameObject card = new GameObject("Card");
+        card.transform.SetParent(overlayPanel.transform, false);
+        RectTransform cardRect = card.AddComponent<RectTransform>();
+        cardRect.anchorMin = new Vector2(0.5f, 0.5f);
+        cardRect.anchorMax = new Vector2(0.5f, 0.5f);
+        cardRect.sizeDelta = new Vector2(520f, 360f);
+        Image cardImage = card.AddComponent<Image>();
+        cardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
+        cardImage.type = Image.Type.Sliced;
+
+        Text message = CreateLabel(card.transform, "MessageLabel", new Vector2(0.5f, 0.5f), new Vector2(0f, 80f), new Vector2(440f, 140f),
+            30, UITheme.ColorFg, TextAnchor.MiddleCenter, bodyBoldFont, FontStyle.Bold);
+        message.text = "서버와의 연결이 끊어졌습니다.";
+
+        Button retryButton = CreateMenuButton(card.transform, "RetryButton", new Vector2(0f, -40f), "재접속");
+        Button quitButton = CreateMenuButton(card.transform, "QuitButton", new Vector2(0f, -120f), "게임 종료");
+
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(retryButton.onClick, statusUI.OnRetryClicked);
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(quitButton.onClick, statusUI.OnQuitClicked);
+
+        statusUI.overlayPanel = overlayPanel;
+        statusUI.messageText = message;
+
+        overlayPanel.SetActive(false);
     }
 }
 #endif

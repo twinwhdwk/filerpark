@@ -20,6 +20,7 @@ public class StageManagerNGO : MonoBehaviour
     private void Awake()
     {
         if (hazard != null) hazardSpawnPosition = hazard.transform.position;
+        AudioManager.Instance?.PlayStageMusic();
     }
 
     // RisingHazardNGO가 낙오를 감지하면 호출한다. 전원 스폰 지점으로 리셋 + 해저드

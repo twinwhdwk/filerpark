@@ -105,5 +105,15 @@ public class PlayerMovementNGO : NetworkBehaviour
     {
         if (!isGrounded) return;
         rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
+        PlayJumpSfxClientRpc();
+    }
+
+    // 점프 성공 여부는 서버(isGrounded)만 판정할 수 있어 NetworkVariable로 자연히
+    // 드러나지 않는다 -- 그래서 다른 코옵 기믹(문/블록/열쇠)의 SFX처럼 값 변경
+    // 콜백에 얹지 못하고, 서버가 성공을 확인한 시점에 명시적으로 브로드캐스트한다.
+    [ClientRpc]
+    private void PlayJumpSfxClientRpc()
+    {
+        AudioManager.Instance?.PlaySfx(SfxId.Jump);
     }
 }
