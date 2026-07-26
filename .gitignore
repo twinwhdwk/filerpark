@@ -11,6 +11,7 @@ MemoryCaptures/
 # Local player/server builds (produced by Assets/Editor/BuildScript.cs)
 ClientBuild/
 ServerBuild/
+ServerBuildWindows/
 build_*.log
 build_*.pid
 
@@ -32,6 +33,11 @@ headless_*.log
 
 # Local reference clones (not part of this project)
 ref/
+
+# Unity Performance Testing package auto-generated bookkeeping (not authored content --
+# appears in Assets/Resources/ whenever the Editor enters Play mode with that package present)
+Assets/Resources/PerformanceTestRunInfo.json*
+Assets/Resources/PerformanceTestRunSettings.json*
 
 # OS
 .DS_Store

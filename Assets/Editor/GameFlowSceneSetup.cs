@@ -55,7 +55,9 @@ public static class GameFlowSceneSetup
 
         Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-        CreateOrthoCamera(false);
+        // 유일하게 AudioListener를 갖는 카메라 -- Bootstrap은 절대 언로드되지 않으므로
+        // 이 하나로 Lobby/Stage 어디를 오가든 항상 충분하다 (CreateOrthoCamera 주석 참고).
+        CreateOrthoCamera(false, withAudioListener: true);
 
         GameObject nmObj = new GameObject("NetworkManager");
         NetworkManager networkManager = nmObj.AddComponent<NetworkManager>();
@@ -113,6 +115,7 @@ public static class GameFlowSceneSetup
         BuildConnectionStatusUI();
 
         EditorSceneManager.SaveScene(scene, BootstrapScenePath);
+        ReopenAndResaveToFixNetworkObjectHashes(BootstrapScenePath);
         Debug.Log($"[FlowSetup] Bootstrap 씬 생성 완료: {BootstrapScenePath}");
     }
 
@@ -179,13 +182,11 @@ public static class GameFlowSceneSetup
 
         CreateSpawnPoints();
 
-        if (Object.FindFirstObjectByType<EventSystem>() == null)
-        {
-            GameObject es = new GameObject("EventSystem");
-            es.AddComponent<EventSystem>();
-            es.AddComponent<StandaloneInputModule>();
-        }
-
+        // EventSystem은 여기서 만들지 않는다 -- Bootstrap(절대 언로드 안 됨)이 이미
+        // 하나를 갖고 있고, Lobby는 항상 Bootstrap과 함께 로드되므로 그걸로 충분하다.
+        // 예전엔 여기서도 하나 더 만들어서, 씬 생성 시점(단독 NewScene)에는 "없으니까
+        // 만든다"는 이 검사가 통과했지만 런타임에는 항상 Bootstrap 것과 중복돼
+        // "There are 2 event systems" 경고가 매 프레임 쌓였다.
         GameObject canvasObj = new GameObject("LobbyCanvas");
         Canvas canvas = canvasObj.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -238,6 +239,7 @@ public static class GameFlowSceneSetup
         BuildWorldMapUI(canvasObj.transform);
 
         EditorSceneManager.SaveScene(scene, LobbyScenePath);
+        ReopenAndResaveToFixNetworkObjectHashes(LobbyScenePath);
         Debug.Log($"[FlowSetup] Lobby 씬 생성 완료: {LobbyScenePath}");
     }
 
@@ -429,6 +431,7 @@ public static class GameFlowSceneSetup
         BuildStageUI(goalScript, "Stage 1 · Gatekeeper");
 
         EditorSceneManager.SaveScene(scene, Stage01ScenePath);
+        ReopenAndResaveToFixNetworkObjectHashes(Stage01ScenePath);
         Debug.Log($"[FlowSetup] Stage01 씬 생성 완료: {Stage01ScenePath}");
     }
 
@@ -441,13 +444,9 @@ public static class GameFlowSceneSetup
     //    다음 스테이지 씬이 로드되면 이 오브젝트 자체가 통째로 사라지며 자연스럽게 정리된다.
     private static void BuildStageUI(GoalZoneNGO goalZone, string stageLabel)
     {
-        if (Object.FindFirstObjectByType<EventSystem>() == null)
-        {
-            GameObject es = new GameObject("EventSystem");
-            es.AddComponent<EventSystem>();
-            es.AddComponent<StandaloneInputModule>();
-        }
-
+        // EventSystem은 여기서도 만들지 않는다 -- CreateLobbyScene()과 동일한 이유로,
+        // 스테이지 씬은 항상 Bootstrap과 함께 로드되므로 Bootstrap의 EventSystem 하나면
+        // 충분하다 (Bootstrap은 절대 언로드되지 않음).
         GameObject canvasObj = new GameObject("StageUICanvas");
         Canvas canvas = canvasObj.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -587,6 +586,7 @@ public static class GameFlowSceneSetup
         BuildStageUI(goalScript, "Stage 2 · Block Carry");
 
         EditorSceneManager.SaveScene(scene, Stage02ScenePath);
+        ReopenAndResaveToFixNetworkObjectHashes(Stage02ScenePath);
         Debug.Log($"[FlowSetup] Stage02 씬 생성 완료: {Stage02ScenePath}");
     }
 
@@ -700,6 +700,7 @@ public static class GameFlowSceneSetup
         BuildStageUI(goalScript, "Stage 3 · Key Relay");
 
         EditorSceneManager.SaveScene(scene, Stage03ScenePath);
+        ReopenAndResaveToFixNetworkObjectHashes(Stage03ScenePath);
         Debug.Log($"[FlowSetup] Stage03 씬 생성 완료: {Stage03ScenePath}");
     }
 
@@ -760,6 +761,7 @@ public static class GameFlowSceneSetup
         BuildStageUI(goalScript, "Stage 4 · Escape Countdown");
 
         EditorSceneManager.SaveScene(scene, Stage04ScenePath);
+        ReopenAndResaveToFixNetworkObjectHashes(Stage04ScenePath);
         Debug.Log($"[FlowSetup] Stage04 씬 생성 완료: {Stage04ScenePath}");
     }
 
@@ -853,14 +855,40 @@ public static class GameFlowSceneSetup
         }
     }
 
-    private static void CreateOrthoCamera(bool withFollow)
+    // AddComponent<NetworkObject>() 직후 같은 배치 실행 안에서 바로 SaveScene()하면,
+    // NetworkObject.OnValidate()의 GlobalObjectIdHash 계산이 아직 안 끝난 상태(0)로
+    // 저장돼버린다 -- 씬 하나에 scene-placed NetworkObject가 2개 이상이면 전부 해시
+    // 0으로 저장되고, 나중에 그 씬을 로드할 때 NGO가 "이미 같은 GlobalObjectIdHash를
+    // 가진 오브젝트가 있다"는 예외를 던진다(헤드리스 스모크 테스트로 Stage01의
+    // CoopButton1/CoopDoor1/GoalZone1이 전부 해시 0으로 저장된 걸 실측 확인).
+    // 저장한 씬을 곧바로 다시 열고 한 번 더 저장하면, 그 사이의 씬 로드가 각
+    // NetworkObject의 OnValidate를 다시 트리거해서 정상적인 고유 해시가 계산된다
+    // -- 실측으로 검증된 수정법. 모든 Create*Scene() 메서드가 이 저장 직후 호출한다.
+    private static void ReopenAndResaveToFixNetworkObjectHashes(string path)
+    {
+        Scene reopened = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+        EditorSceneManager.SaveScene(reopened, path);
+    }
+
+    // withAudioListener는 Bootstrap의 카메라(CreateBootstrapScene)에서만 true로 준다.
+    // Bootstrap은 절대 언로드되지 않으므로 그 AudioListener 하나가 Lobby/Stage가
+    // 오가는 내내 항상 살아있다 -- 모든 SFX/음악을 spatialBlend=0(비공간 2D)으로
+    // 재생하는 AudioManager 입장에서는 리스너 위치 자체가 무의미하므로, 스테이지마다
+    // 카메라를 따로 둬도 리스너는 하나만 있으면 충분하다. 예전엔 스테이지 카메라마다
+    // 이 컴포넌트를 하나씩 더 붙여서, Lobby/Stage가 Bootstrap과 함께 로드될 때마다
+    // "There are 2 audio listeners" 경고가 매 프레임 콘솔/서버 로그에 쌓이는 문제가
+    // 있었다(실측: 헤드리스 스모크 테스트 로그가 수백만 줄로 불어남).
+    private static void CreateOrthoCamera(bool withFollow, bool withAudioListener = false)
     {
         GameObject camObj = new GameObject("Main Camera");
         camObj.tag = "MainCamera";
         Camera cam = camObj.AddComponent<Camera>();
         cam.orthographic = true;
         cam.orthographicSize = 6f;
-        camObj.AddComponent<AudioListener>();
+        if (withAudioListener)
+        {
+            camObj.AddComponent<AudioListener>();
+        }
         if (withFollow)
         {
             camObj.AddComponent<CoopCameraFollow>();

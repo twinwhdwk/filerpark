@@ -28,17 +28,39 @@ public class LoadingScreenUI : MonoBehaviour
     private float nextDotUpdateTime;
     private int dotCount;
 
+    // NetworkManager.Singleton은 Bootstrap 씬이 로드되는 즉시 존재하지만, 그 안의
+    // SceneManager(NetworkSceneManager)는 서버/클라이언트가 실제로 시작된 뒤에야
+    // 만들어진다 -- OnEnable 시점(NetworkBootstrapper.Start()가 StartServer/
+    // StartClient를 부르기도 전)에 곧바로 SceneManager.OnSceneEvent를 구독하려 하면
+    // NullReferenceException이 난다(헤드리스 스모크 테스트로 실측). GameFlowManager.
+    // OnNetworkDespawn()이 이미 SceneManager != null로 방어하는 것과 같은 함정이라,
+    // NetworkStatusUI.cs처럼 OnServerStarted/OnClientStarted가 실제로 불린 뒤에만
+    // SceneManager를 건드리도록 미룬다.
     private void OnEnable()
     {
         if (NetworkManager.Singleton == null) return;
-        NetworkManager.Singleton.SceneManager.OnSceneEvent += HandleSceneEvent;
+        NetworkManager.Singleton.OnServerStarted += HandleNetworkStarted;
+        NetworkManager.Singleton.OnClientStarted += HandleNetworkStarted;
         SetOverlayActive(false);
     }
 
     private void OnDisable()
     {
-        if (NetworkManager.Singleton == null || NetworkManager.Singleton.SceneManager == null) return;
-        NetworkManager.Singleton.SceneManager.OnSceneEvent -= HandleSceneEvent;
+        if (NetworkManager.Singleton == null) return;
+        NetworkManager.Singleton.OnServerStarted -= HandleNetworkStarted;
+        NetworkManager.Singleton.OnClientStarted -= HandleNetworkStarted;
+        if (NetworkManager.Singleton.SceneManager != null)
+        {
+            NetworkManager.Singleton.SceneManager.OnSceneEvent -= HandleSceneEvent;
+        }
+    }
+
+    private void HandleNetworkStarted()
+    {
+        if (NetworkManager.Singleton.SceneManager != null)
+        {
+            NetworkManager.Singleton.SceneManager.OnSceneEvent += HandleSceneEvent;
+        }
     }
 
     private void Update()
