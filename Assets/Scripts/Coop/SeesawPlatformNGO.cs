@@ -52,22 +52,3 @@ public class SeesawPlatformNGO : NetworkBehaviour
         transform.rotation = Quaternion.Euler(0f, 0f, newZ);
     }
 }
-
-// SeesawPlatformNGO의 자식에 붙는 좌/우 판정용 트리거. 부모의 leftHoldPoint/
-// rightHoldPoint와는 별개 -- 이건 "지금 그 자리에 서 있는가"를 세고, holdPoint는
-// 봇이 "어디로 이동해야 하는가"를 가리키는 목표 좌표일 뿐이다.
-public class SeesawSideZone : MonoBehaviour
-{
-    public SeesawPlatformNGO platform;
-    public bool isLeftSide;
-
-    private void OnTriggerEnter2D(Collider2D collision)
-    {
-        if (platform != null && collision.CompareTag("Player")) platform.ReportEnter(isLeftSide, collision);
-    }
-
-    private void OnTriggerExit2D(Collider2D collision)
-    {
-        if (platform != null && collision.CompareTag("Player")) platform.ReportExit(isLeftSide, collision);
-    }
-}

@@ -74,6 +74,9 @@ public class BotController : NetworkBehaviour
     private const float BackupPerAttempt = 0.12f; // 시도가 반복될수록 후퇴 시간을 늘림
     private const float MaxBackupDur = 0.75f;
     private const float ForwardDur = 0.55f;       // 후퇴 후 도움닫기 전진 시간
+    // 팀원에 막힌 걸로 판정해 회복을 억제하는 유예 시간. 이보다 오래 계속되면
+    // "일시적 붐빔"이 아니라 "영원히 안 움직이는 팀원"으로 보고 회복을 재개한다.
+    private const float TeammateBlockGraceTime = 2.5f;
 
     private bool recoverySuppressed;
     private float progressAnchorX;
@@ -84,6 +87,7 @@ public class BotController : NetworkBehaviour
     private int recoveryAttempts;
     private bool recoveryBackupJumped;
     private bool recoveryForwardJumped;
+    private float teammateBlockedSince = -1f;
 
     public override void OnNetworkSpawn()
     {
@@ -541,20 +545,44 @@ public class BotController : NetworkBehaviour
             return;
         }
 
-        // 정적 지오메트리 끼임이 아닌 "가짜 정체"에는 회복 기동(후퇴+점프)을 하지 않는다.
-        //  (1) 이미 골존 안이면 위치가 충분히 좋아 언스틱이 필요 없다(골 판정은 존 안에
-        //      "있는가"이지 정확한 중심 도달이 아니다).
-        //  (2) 진행 방향에 팀원이 몸 하나 거리로 밀착해 있으면 지형이 아니라 "동적 팀원
-        //      혼잡"이다 -- 점프로는 애초에 안 풀리고, 밀집한 다이나믹 바디들 사이에 큰
-        //      충돌 임펄스를 만들어 오히려 튕겨나가(→ 얇은 바닥 관통 낙사) 상황을 악화시킨다.
-        // 이 경우 정체 타이머만 눌러두고 정상 입력을 유지한다(혼잡은 팀원이 자리잡으면 풀린다).
-        if (IsInsideGoalZone() || TeammateDirectlyAhead(dir))
+        // 이미 골존 안이면 위치가 충분히 좋아 언스틱이 필요 없다(골 판정은 존 안에
+        // "있는가"이지 정확한 중심 도달이 아니다) -- 이건 시간 제한 없이 계속 억제한다.
+        if (IsInsideGoalZone())
         {
             progressAnchorX = myX;
             lastProgressTime = Time.time;
             recoveryActive = false;
             recoveryAttempts = 0;
+            teammateBlockedSince = -1f;
             return;
+        }
+
+        // 진행 방향에 팀원이 몸 하나 거리로 밀착해 있으면 지형이 아니라 "동적 팀원 혼잡"일
+        // 수 있다 -- 점프로는 애초에 안 풀리고, 밀집한 다이나믹 바디들 사이에 큰 충돌
+        // 임펄스를 만들어 오히려 튕겨나가(→ 얇은 바닥 관통 낙사) 상황을 악화시킬 수 있다.
+        // 다만 이 억제를 무기한 걸면 안 된다 -- Stage3 5봇 테스트로 실측: 열쇠 운반자가
+        // "문이 열릴 때까지 제자리 대기"하는(=영원히 안 움직이는) 팀원 바로 옆에서 막혀,
+        // 매 프레임 이 조건이 다시 참이 되어 정체 타이머가 한 번도 못 쌓이고 영구
+        // 데드락에 빠졌다(운반자가 못 움직이니 문도 안 열리고, 대기자는 문이 안 열리니
+        // 계속 그 자리 -- 서로가 서로를 막음). 골 근처의 일시적 붐빔(몇 초 안에 팀원이
+        // 자리를 잡아 풀림)과 "팀원이 원래 거기 영원히 서 있음"을 구분할 수 없으므로,
+        // 이 억제 자체에 유예 시간을 둬서 오래 지속되면 포기하고 일반 회복 로직으로
+        // 넘긴다 -- 그러면 최소한 옆으로 비켜서라도 데드락을 깬다.
+        if (TeammateDirectlyAhead(dir))
+        {
+            if (teammateBlockedSince < 0f) teammateBlockedSince = Time.time;
+            if (Time.time - teammateBlockedSince < TeammateBlockGraceTime)
+            {
+                progressAnchorX = myX;
+                lastProgressTime = Time.time;
+                recoveryActive = false;
+                recoveryAttempts = 0;
+                return;
+            }
+        }
+        else
+        {
+            teammateBlockedSince = -1f;
         }
 
         if (!recoveryActive)
