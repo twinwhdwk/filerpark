@@ -55,6 +55,17 @@ public class AudioManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
+#if UNITY_SERVER
+        // 데디케이티드 서버는 소리를 들을 사람이 없다. AudioClip.Create()로 만든
+        // 클립에 SetData()를 호출하면, 오디오 디바이스가 없는 헤드리스 서버
+        // 빌드에서는 매번 실패해 "AudioClip.SetData failed; AudioClip contains no
+        // data" 경고만 시작할 때마다 스팸으로 남긴다(실측: 실제 GCP 서버 로그에서
+        // 합성 클립 개수만큼 반복 확인). sfxSource/musicSource가 null로 남으므로
+        // PlaySfx/PlayLobbyMusic/PlayStageMusic은 이미 있는 null 체크로 조용히
+        // 아무 일도 하지 않는다 -- 서버에서 이 메서드들을 부르는 코드도 없다
+        // (전부 클라이언트 전용 UI/프레젠테이션 스크립트에서만 호출됨).
+        return;
+#else
         sfxSource = gameObject.AddComponent<AudioSource>();
         sfxSource.playOnAwake = false;
         sfxSource.spatialBlend = 0f;
@@ -67,6 +78,7 @@ public class AudioManager : MonoBehaviour
         LoadVolumePrefs();
         BuildSfxClips();
         BuildMusicClips();
+#endif
     }
 
     private void LoadVolumePrefs()
