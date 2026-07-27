@@ -13,6 +13,7 @@ public class PauseMenuUI : MonoBehaviour
     [Header("패널")]
     public GameObject pausePanel;
     public GameObject settingsPanel;
+    public GameObject quitConfirmPanel;
 
     [Header("설정 슬라이더")]
     public Slider masterSlider;
@@ -20,6 +21,7 @@ public class PauseMenuUI : MonoBehaviour
     public Slider sfxSlider;
 
     private bool settingsOpen;
+    private bool quitConfirmOpen;
 
     private void OnEnable()
     {
@@ -30,7 +32,11 @@ public class PauseMenuUI : MonoBehaviour
     {
         if (!Input.GetKeyDown(KeyCode.Escape)) return;
 
-        if (settingsOpen)
+        if (quitConfirmOpen)
+        {
+            OnQuitCancelled();
+        }
+        else if (settingsOpen)
         {
             CloseSettings();
         }
@@ -49,7 +55,11 @@ public class PauseMenuUI : MonoBehaviour
     private void SetPauseActive(bool active)
     {
         if (pausePanel != null) pausePanel.SetActive(active);
-        if (!active) CloseSettingsImmediate();
+        if (!active)
+        {
+            CloseSettingsImmediate();
+            CloseQuitConfirmImmediate();
+        }
     }
 
     public void OnResumeClicked()
@@ -99,7 +109,29 @@ public class PauseMenuUI : MonoBehaviour
     public void OnMusicVolumeChanged(float value) => AudioManager.Instance?.SetMusicVolume(value);
     public void OnSfxVolumeChanged(float value) => AudioManager.Instance?.SetSfxVolume(value);
 
+    // 협동 게임이라 다른 플레이어가 아직 하고 있는 도중에 실수로 ESC -> 종료를
+    // 연달아 눌러 세션을 끊어버리는 사고가 나기 쉽다 -- 바로 종료하지 않고 확인
+    // 패널을 한 번 더 거친다.
     public void OnQuitClicked()
+    {
+        PlayClick();
+        quitConfirmOpen = true;
+        if (quitConfirmPanel != null) quitConfirmPanel.SetActive(true);
+    }
+
+    public void OnQuitCancelled()
+    {
+        PlayClick();
+        CloseQuitConfirmImmediate();
+    }
+
+    private void CloseQuitConfirmImmediate()
+    {
+        quitConfirmOpen = false;
+        if (quitConfirmPanel != null) quitConfirmPanel.SetActive(false);
+    }
+
+    public void OnQuitConfirmed()
     {
         PlayClick();
         if (NetworkManager.Singleton != null && (NetworkManager.Singleton.IsClient || NetworkManager.Singleton.IsServer))

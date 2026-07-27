@@ -1067,14 +1067,14 @@ public static class GameFlowSceneSetup
 
     // 일시정지/설정/접속-끊김 오버레이가 공통으로 쓰는 배지형 버튼 -- ConnectButton과
     // 동일한 UI_ButtonPrimary.png 스타일(초록 채움 + 흰 테두리)을 재사용한다.
-    private static Button CreateMenuButton(Transform parent, string name, Vector2 anchoredPosition, string label)
+    private static Button CreateMenuButton(Transform parent, string name, Vector2 anchoredPosition, string label, float width = 320f)
     {
         GameObject buttonObj = new GameObject(name);
         buttonObj.transform.SetParent(parent, false);
         RectTransform rect = buttonObj.AddComponent<RectTransform>();
         rect.anchorMin = new Vector2(0.5f, 0.5f);
         rect.anchorMax = new Vector2(0.5f, 0.5f);
-        rect.sizeDelta = new Vector2(320f, 70f);
+        rect.sizeDelta = new Vector2(width, 70f);
         rect.anchoredPosition = anchoredPosition;
 
         Image image = buttonObj.AddComponent<Image>();
@@ -1084,7 +1084,7 @@ public static class GameFlowSceneSetup
         Button button = buttonObj.AddComponent<Button>();
         button.targetGraphic = image;
 
-        Text text = CreateLabel(buttonObj.transform, "Label", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(320f, 70f),
+        Text text = CreateLabel(buttonObj.transform, "Label", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, 70f),
             28, UITheme.ColorWhite, TextAnchor.MiddleCenter, bodyBoldFont, FontStyle.Bold);
         text.text = label;
 
@@ -1246,9 +1246,31 @@ public static class GameFlowSceneSetup
         UnityEditor.Events.UnityEventTools.AddPersistentListener(musicSlider.onValueChanged, pauseMenu.OnMusicVolumeChanged);
         UnityEditor.Events.UnityEventTools.AddPersistentListener(sfxSlider.onValueChanged, pauseMenu.OnSfxVolumeChanged);
 
+        // 종료 확인 서브패널 -- 설정 패널과 같은 자리에 겹쳐 뜨는 작은 카드.
+        GameObject quitConfirmPanel = new GameObject("QuitConfirmPanel");
+        quitConfirmPanel.transform.SetParent(pausePanel.transform, false);
+        RectTransform quitConfirmRect = quitConfirmPanel.AddComponent<RectTransform>();
+        quitConfirmRect.anchorMin = new Vector2(0.5f, 0.5f);
+        quitConfirmRect.anchorMax = new Vector2(0.5f, 0.5f);
+        quitConfirmRect.sizeDelta = new Vector2(480f, 280f);
+        Image quitConfirmImage = quitConfirmPanel.AddComponent<Image>();
+        quitConfirmImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
+        quitConfirmImage.type = Image.Type.Sliced;
+
+        CreateLabel(quitConfirmPanel.transform, "QuitConfirmTitle", new Vector2(0.5f, 0.5f), new Vector2(0f, 80f), new Vector2(420f, 100f),
+            28, UITheme.ColorFg, TextAnchor.MiddleCenter, bodyBoldFont, FontStyle.Bold).text = "정말 게임을 종료하시겠습니까?";
+
+        Button quitConfirmButton = CreateMenuButton(quitConfirmPanel.transform, "ConfirmButton", new Vector2(-125f, -60f), "종료", 200f);
+        Button quitCancelButton = CreateMenuButton(quitConfirmPanel.transform, "CancelButton", new Vector2(125f, -60f), "취소", 200f);
+
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(quitConfirmButton.onClick, pauseMenu.OnQuitConfirmed);
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(quitCancelButton.onClick, pauseMenu.OnQuitCancelled);
+
         settingsPanel.SetActive(false);
+        quitConfirmPanel.SetActive(false);
         pauseMenu.pausePanel = pausePanel;
         pauseMenu.settingsPanel = settingsPanel;
+        pauseMenu.quitConfirmPanel = quitConfirmPanel;
         pauseMenu.masterSlider = masterSlider;
         pauseMenu.musicSlider = musicSlider;
         pauseMenu.sfxSlider = sfxSlider;
