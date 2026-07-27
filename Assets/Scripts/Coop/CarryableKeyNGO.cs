@@ -20,6 +20,12 @@ public class CarryableKeyNGO : NetworkBehaviour
     public readonly NetworkVariable<ulong> carrierClientId = new NetworkVariable<ulong>(
         NoCarrier, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    // 들고 있는 동안 FixedUpdate가 매 틱 NetworkManager.ConnectedClients 딕셔너리를
+    // 뒤지지 않도록, 캐리어가 바뀔 때(OnCarrierChanged, 서버에서만) 한 번만 찾아 캐시한다.
+    // 오브젝트가 파괴되면(디스폰) Unity가 오버라이드한 == 비교가 알아서 null로 보이므로
+    // 딕셔너리 재조회 없이도 연결 끊김을 그대로 감지한다.
+    private Transform carrierTransform;
+
     public override void OnNetworkSpawn()
     {
         carrierClientId.OnValueChanged += OnCarrierChanged;
@@ -33,6 +39,16 @@ public class CarryableKeyNGO : NetworkBehaviour
     private void OnCarrierChanged(ulong previousValue, ulong newValue)
     {
         AudioManager.Instance?.PlaySfx(newValue == NoCarrier ? SfxId.KeyDrop : SfxId.KeyPickup);
+
+        if (!IsServer) return;
+
+        carrierTransform = null;
+        if (newValue != NoCarrier
+            && NetworkManager.Singleton.ConnectedClients.TryGetValue(newValue, out NetworkClient client)
+            && client.PlayerObject != null)
+        {
+            carrierTransform = client.PlayerObject.transform;
+        }
     }
 
     [ServerRpc(RequireOwnership = false)]
@@ -61,13 +77,12 @@ public class CarryableKeyNGO : NetworkBehaviour
     {
         if (!IsServer || carrierClientId.Value == NoCarrier) return;
 
-        if (!NetworkManager.Singleton.ConnectedClients.TryGetValue(carrierClientId.Value, out NetworkClient client)
-            || client.PlayerObject == null)
+        if (carrierTransform == null)
         {
             carrierClientId.Value = NoCarrier;
             return;
         }
 
-        transform.position = client.PlayerObject.transform.position + carryOffset;
+        transform.position = carrierTransform.position + carryOffset;
     }
 }

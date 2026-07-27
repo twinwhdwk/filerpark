@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 // Main Camera에 부착. 네트워크 동기화 대상이 아니다 -- 각 클라이언트가 자기 화면에서
@@ -5,9 +6,6 @@ using UnityEngine;
 // 동기화되어 있으므로 이 스크립트는 그 결과만 읽는다.
 public class CoopCameraFollow : MonoBehaviour
 {
-    [Header("추적 대상")]
-    public string playerTag = "Player";
-
     [Header("줌 설정")]
     public float minOrthoSize = 3f;
     public float maxOrthoSize = 12f;
@@ -28,11 +26,15 @@ public class CoopCameraFollow : MonoBehaviour
 
     private void LateUpdate()
     {
-        GameObject[] players = GameObject.FindGameObjectsWithTag(playerTag);
-        if (players.Length == 0) return;
+        // 매 프레임 GameObject.FindGameObjectsWithTag로 씬을 스캔하며 새 배열을
+        // 할당하는 대신, PlayerSetupNGO가 스폰/디스폰 시점에만 갱신하는 공유 목록을
+        // 그대로 읽는다(할당 없음) -- 카메라는 이미 SmoothDamp로 위치를 보간하므로
+        // 목록이 프레임마다 새로 스캔될 필요가 애초에 없다.
+        List<GameObject> players = PlayerSetupNGO.ActivePlayers;
+        if (players.Count == 0) return;
 
         Bounds bounds = new Bounds(players[0].transform.position, Vector3.zero);
-        for (int i = 1; i < players.Length; i++)
+        for (int i = 1; i < players.Count; i++)
         {
             bounds.Encapsulate(players[i].transform.position);
         }

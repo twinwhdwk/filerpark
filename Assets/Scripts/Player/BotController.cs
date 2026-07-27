@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 
@@ -45,6 +46,7 @@ public class BotController : NetworkBehaviour
     // 0.5초마다(또는 스테이지 전환으로 goal이 사라졌을 때 즉시) 다시 스캔한다.
     private float nextStageScan;
     private GoalZoneNGO goal;
+    private BoxCollider2D goalCollider;
     private PushableBlockNGO block;
     private CarryableKeyNGO key;
     private KeyDoorNGO keyDoor;
@@ -53,8 +55,9 @@ public class BotController : NetworkBehaviour
     private CoopDoorNGO coopDoor;
     private CoopButtonNGO coopButton;
 
-    // 매 StageAuto 프레임마다 한 번만 갱신해서 하위 로직이 공유하는 스크래치.
-    private GameObject[] players;
+    // PlayerSetupNGO.ActivePlayers를 그대로 참조한다(매 프레임 FindGameObjectsWithTag로
+    // 새 배열을 할당하지 않도록) -- 하위 로직 다수가 매 StageAuto 프레임 이 목록을 읽는다.
+    private List<GameObject> players;
     private float nextPickupRequest;
 
     // ---- 범용 이동 회복(막힘 탈출) 레이어 ----
@@ -148,11 +151,10 @@ public class BotController : NetworkBehaviour
 
     private void UpdateFollowNearest()
     {
-        GameObject[] all = GameObject.FindGameObjectsWithTag("Player");
         GameObject nearest = null;
         float nearestDist = float.MaxValue;
 
-        foreach (GameObject player in all)
+        foreach (GameObject player in PlayerSetupNGO.ActivePlayers)
         {
             if (player == gameObject) continue;
             float dist = Mathf.Abs(player.transform.position.x - transform.position.x);
@@ -178,7 +180,7 @@ public class BotController : NetworkBehaviour
     private void UpdateStageAuto()
     {
         RefreshStageRefs();
-        players = GameObject.FindGameObjectsWithTag("Player");
+        players = PlayerSetupNGO.ActivePlayers;
         recoverySuppressed = false;
 
         // 판별 순서는 각 스테이지가 가진 "고유" 기믹 기준. 4개 스테이지는 서로
@@ -201,6 +203,7 @@ public class BotController : NetworkBehaviour
         nextStageScan = Time.time + 0.5f;
 
         goal = Object.FindAnyObjectByType<GoalZoneNGO>();
+        goalCollider = goal != null ? goal.GetComponent<BoxCollider2D>() : null;
         block = Object.FindAnyObjectByType<PushableBlockNGO>();
         key = Object.FindAnyObjectByType<CarryableKeyNGO>();
         keyDoor = Object.FindAnyObjectByType<KeyDoorNGO>();
@@ -430,7 +433,7 @@ public class BotController : NetworkBehaviour
 
         float goalX = goal.transform.position.x;
         float inner = Mathf.Max(0.4f, GoalHalfWidth() - 0.8f); // 가장자리에서 살짝 안쪽까지만 사용
-        int n = Mathf.Max(1, players.Length);
+        int n = Mathf.Max(1, players.Count);
         int rank = Mathf.Clamp(GetMyRank(), 0, n - 1);
         float frac = (n <= 1) ? 0.5f : (float)rank / (n - 1); // 0..1
         float slotX = goalX - inner + frac * (2f * inner);
@@ -441,10 +444,8 @@ public class BotController : NetworkBehaviour
     // 골존 트리거의 월드 반폭. 스테이지마다 다르므로(넓은 S1, 좁은 S2~4) 콜라이더에서 읽는다.
     private float GoalHalfWidth()
     {
-        if (goal == null) return 3f;
-        BoxCollider2D col = goal.GetComponent<BoxCollider2D>();
-        if (col == null) return 3f;
-        return Mathf.Abs(col.size.x * goal.transform.lossyScale.x) * 0.5f;
+        if (goal == null || goalCollider == null) return 3f;
+        return Mathf.Abs(goalCollider.size.x * goal.transform.lossyScale.x) * 0.5f;
     }
 
     // 이미 골존 안(가로 기준)에 들어와 있는가. 들어와 있으면 위치는 충분히 좋으므로

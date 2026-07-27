@@ -193,7 +193,16 @@ public class GameFlowManager : NetworkBehaviour
                 countdownEndsAt = Time.time + lobbyCountdownSeconds;
                 Debug.Log($"[GameFlow] 시작 카운트다운 개시 ({lobbyCountdownSeconds}초, 접속 {connected}명)");
             }
-            lobbyCountdownRemaining.Value = Mathf.Max(0f, countdownEndsAt - Time.time);
+            // NetworkVariable에 대입할 때마다(값이 미세하게라도 다르면) NGO가 다음 네트워크
+            // 틱에 모든 클라이언트로 그 변경을 복제한다 -- 매 프레임(초당 수십 번) 정확한
+            // 실수값을 대입하면 정작 유일한 소비처인 LobbyUI.cs가 반올림해서 초 단위로만
+            // 보여주는 값을 위해 그만큼의 트래픽을 매 프레임 뿌리는 셈이다. 화면에 실제로
+            // 보이는 정수 초가 바뀔 때만 써서 복제 빈도를 초당 1회 수준으로 줄인다.
+            float remaining = Mathf.Max(0f, countdownEndsAt - Time.time);
+            if (Mathf.RoundToInt(remaining) != Mathf.RoundToInt(lobbyCountdownRemaining.Value))
+            {
+                lobbyCountdownRemaining.Value = remaining;
+            }
             if (Time.time >= countdownEndsAt)
             {
                 StartNextStage();
