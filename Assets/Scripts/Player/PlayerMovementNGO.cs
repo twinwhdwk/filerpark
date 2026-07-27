@@ -18,6 +18,18 @@ public class PlayerMovementNGO : NetworkBehaviour
     private const float FallLimitY = -20f;
     private const float SafeRespawnY = 2f;
 
+    // 코요테 타임(플랫폼 가장자리에서 막 벗어난 직후에도 잠깐 점프를 허용) + 점프
+    // 버퍼링(착지 직전에 미리 누른 점프를 착지 즉시 실행) -- "isGrounded인 그 프레임에
+    // 정확히 눌러야만 점프된다"는 원래 판정은 퍼즐 플랫포머에서 특히 잘 느껴지는
+    // 종류의 "입력이 씹혔다"는 답답함을 만든다. 서버 FixedUpdate가 유일한 물리/판정
+    // 권위이므로 두 타이머 모두 서버에서만 관리한다 -- 클라이언트 입력(RequestJumpServerRpc)은
+    // 그저 "지금 점프 버튼을 눌렀다"는 순간을 버퍼에 기록할 뿐, 실제 점프 여부/타이밍은
+    // 여전히 서버가 100% 판정한다.
+    private const float CoyoteTime = 0.12f;
+    private const float JumpBufferTime = 0.12f;
+    private float lastGroundedTime = float.NegativeInfinity;
+    private float jumpBufferedUntil = float.NegativeInfinity;
+
     private Rigidbody2D rb;
     private bool isGrounded;
     private BotController bot;
@@ -96,6 +108,19 @@ public class PlayerMovementNGO : NetworkBehaviour
 
         isGrounded = groundCheck != null
             && Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+        if (isGrounded)
+        {
+            lastGroundedTime = Time.time;
+        }
+
+        // 버퍼링된 점프 요청이 아직 유효하고(너무 오래 전에 누른 게 아님), 코요테
+        // 타임 안에 있으면(방금까지 바닥이었음) 지금 이 물리 틱에 실행한다. 두 조건
+        // 다 시간 비교라, 정상적인 "바닥에서 즉시 점프"도 자연히 이 경로 하나로 처리된다.
+        if (jumpBufferedUntil >= Time.time && Time.time - lastGroundedTime <= CoyoteTime)
+        {
+            jumpBufferedUntil = float.NegativeInfinity;
+            ExecuteJump();
+        }
 
         rb.linearVelocity = new Vector2(horizontalInput.Value * moveSpeed, rb.linearVelocity.y);
     }
@@ -103,7 +128,15 @@ public class PlayerMovementNGO : NetworkBehaviour
     [ServerRpc]
     private void RequestJumpServerRpc()
     {
-        if (!isGrounded) return;
+        jumpBufferedUntil = Time.time + JumpBufferTime;
+    }
+
+    private void ExecuteJump()
+    {
+        // 점프 직후에도 lastGroundedTime은 "방금"이라 코요테 타임 조건이 그대로
+        // 참으로 남는다 -- 무효화하지 않으면 착지 직후 0.12초 안에 점프를 두 번
+        // 누르는 것만으로 이단 점프가 되어버린다.
+        lastGroundedTime = float.NegativeInfinity;
         rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
         PlayJumpSfxClientRpc();
     }
