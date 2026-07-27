@@ -210,6 +210,15 @@ public static class GameFlowSceneSetup
         LobbyUI lobbyUI = canvasObj.AddComponent<LobbyUI>();
         lobbyUI.statusText = statusText;
 
+        // 처음 접속한 사람에게 조작법을 알려줄 곳이 그동안 아무 데도 없었다 --
+        // 화면 하단에 항상 보이는 작은 힌트 한 줄로, 스테이지로 넘어가기 전에
+        // 자연스럽게 눈에 들어오게 한다.
+        Text controlsHint = CreateLabel(canvasObj.transform, "ControlsHint",
+            new Vector2(0.5f, 0f), new Vector2(0f, 36f), new Vector2(900f, 40f),
+            22, new Color(UITheme.ColorFg.r, UITheme.ColorFg.g, UITheme.ColorFg.b, 0.6f),
+            TextAnchor.MiddleCenter, bodyMediumFont);
+        controlsHint.text = "조작법 - ←/→ 이동, Space 점프";
+
         // 스코어보드 카드: 라운드 사각형 패널(흰 바탕 + primary 테두리) 위에
         // 헤더 + 플레이어별 색상 점(ScoreboardUI가 PlayerColorNGO 팔레트로 칠함) 목록.
         GameObject scorePanel = new GameObject("ScorePanel");
