@@ -30,9 +30,23 @@ public static class HeadlessSmokeTest
     private const string KeyHostStarted = "HeadlessSmokeTest.HostStarted";
     private const string KeyStartTime = "HeadlessSmokeTest.StartTime";
 
+    // Finish()가 배치 프로세스를 끝내려고 EditorApplication.Exit()을 부르는데,
+    // Unity 문서 자체가 이건 커맨드라인(배치) 모드에서만 쓰라고 명시한다 -- 사람이
+    // Editor를 열어둔 채 이 메뉴를 실수로 눌러도 그대로 실행되면, 관찰 시간이 끝나는
+    // 순간 저장 안 한 씬/애셋 변경사항까지 통째로 Editor가 종료되며 날아간다. 배치
+    // 모드가 아니면 아예 시작하지 않는다.
     [MenuItem("Tools/Coop Setup/Debug: Headless Host Smoke Test")]
     public static void Run()
     {
+        if (!Application.isBatchMode)
+        {
+            Debug.LogWarning("[SmokeTest] 이 도구는 -batchmode로 실행한 Editor에서만 동작합니다 " +
+                "(Finish()가 EditorApplication.Exit()으로 프로세스 자체를 종료하므로, 평소 열어둔 " +
+                "Editor에서 실행하면 저장 안 한 변경사항까지 날아갑니다). 헤드리스로 " +
+                "-executeMethod HeadlessSmokeTest.Run 을 쓰세요.");
+            return;
+        }
+
         EditorSceneManager.OpenScene(BootstrapScenePath, OpenSceneMode.Single);
         SessionState.SetBool(KeyActive, true);
         SessionState.SetBool(KeyHostStarted, false);

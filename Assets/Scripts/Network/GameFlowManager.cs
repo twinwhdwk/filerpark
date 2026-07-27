@@ -26,6 +26,13 @@ public class GameFlowManager : NetworkBehaviour
 
     public static GameFlowManager Instance { get; private set; }
 
+    // 월드맵 UI(StageIntroUI.OnStartPressed -> RequestSelectStageServerRpc)는 여기
+    // 있는 이름과 Assets/StageData/*.asset의 StageDefinition.sceneName을 문자열로
+    // 매칭한다 -- 이 배열에서 스테이지를 추가/이름 변경/제거하면
+    // NetworkSetupMenu.CreateStageCatalog()(Tools/Coop Setup/7)도 다시 실행해서
+    // 카탈로그를 맞춰야 한다. 안 맞으면 월드맵의 "시작" 버튼이 콘솔 경고만 남기고
+    // 조용히 아무 일도 안 한다 -- 다만 그래도 로비 자동 순환(순서대로 진행)은 이
+    // 배열만으로 그대로 동작하므로 게임 자체가 멈추지는 않는다.
     [Header("스테이지 목록 (씬 이름, 이 배열만 수정하면 스테이지 추가/순서 변경 가능)")]
     public string[] stageSceneNames = { "Stage01_Gatekeeper" };
 
@@ -49,10 +56,12 @@ public class GameFlowManager : NetworkBehaviour
     // 로비의 월드맵 UI에서 플레이어가 직접 스테이지를 고르면 이 값이 채워진다(-1=미선택).
     // 아무도 안 고르면 예전처럼 순서대로 자동 진행되므로, 이 기능이 없어도 이미 검증된
     // 자동 순환 흐름은 그대로 동작한다 -- StartNextStage()의 순서 로직 위에 "다음 한
-    // 번만" 우선하는 선택을 얹을 뿐이다.
+    // 번만" 우선하는 선택을 얹을 뿐이다. 서버는 자기 자신의 NetworkVariable을 그냥
+    // 직접 읽으면 되므로(네트워크 왕복이 필요 없음), 별도의 private 미러 필드를 두지
+    // 않는다 -- 예전엔 뒀었는데, 두 값이 항상 같이 바뀌어야 하는데도 서로 어긋날 수
+    // 있는 불필요한 이중 상태였다.
     public readonly NetworkVariable<int> selectedStageIndexPreview = new NetworkVariable<int>(
         -1, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
-    private int pendingSelectedStageIndex = -1;
 
     private readonly Dictionary<ulong, int> scores = new Dictionary<ulong, int>();
 
@@ -213,7 +222,6 @@ public class GameFlowManager : NetworkBehaviour
         {
             if (stageSceneNames[i] == sceneName)
             {
-                pendingSelectedStageIndex = i;
                 selectedStageIndexPreview.Value = i;
                 Debug.Log($"[GameFlow] 플레이어가 다음 스테이지로 {sceneName}을 선택했습니다.");
                 return;
@@ -232,9 +240,10 @@ public class GameFlowManager : NetworkBehaviour
         }
 
         int nextIndex;
-        if (pendingSelectedStageIndex >= 0 && pendingSelectedStageIndex < stageSceneNames.Length)
+        int selected = selectedStageIndexPreview.Value;
+        if (selected >= 0 && selected < stageSceneNames.Length)
         {
-            nextIndex = pendingSelectedStageIndex;
+            nextIndex = selected;
         }
         else
         {
@@ -244,7 +253,6 @@ public class GameFlowManager : NetworkBehaviour
                 nextIndex = 0;
             }
         }
-        pendingSelectedStageIndex = -1;
         selectedStageIndexPreview.Value = -1;
 
         currentStageIndex.Value = nextIndex;

@@ -41,22 +41,11 @@ public static class ProceduralSfx
 
     // 몇 개 음을 반복 루프로 이어붙인 잔잔한 배경음. 진짜 작곡이 아니라 "완전한
     // 무음보다는 낫다"는 자리채움용이라 화음/리듬은 최대한 단순하게 잡았다 -- 나중에
-    // 실제 BGM 트랙으로 교체하기 전까지의 자리표시자.
+    // 실제 BGM 트랙으로 교체하기 전까지의 자리표시자. 음을 이어붙이는 방식 자체는
+    // CreateChime과 완전히 동일해서(반복 재생 여부는 AudioSource.loop이 결정할 뿐,
+    // 클립 데이터 생성 단계에서는 차이가 없다) 별칭으로 둔다.
     public static AudioClip CreateAmbientLoop(string name, float[] noteFrequencies, float noteDuration, float volume)
-    {
-        int perNote = Mathf.Max(1, Mathf.RoundToInt(noteDuration * SampleRate));
-        int total = perNote * noteFrequencies.Length;
-        float[] samples = new float[total];
-
-        for (int i = 0; i < noteFrequencies.Length; i++)
-        {
-            FillTone(samples, i * perNote, perNote, noteFrequencies[i], noteFrequencies[i], WaveShape.Sine, volume);
-        }
-
-        AudioClip clip = AudioClip.Create(name, total, 1, SampleRate, false);
-        clip.SetData(samples, 0);
-        return clip;
-    }
+        => CreateChime(name, noteFrequencies, noteDuration, volume);
 
     // 시작/끝에 짧은 선형 페이드(attack/release)를 걸어 샘플 경계에서 나는 디지털
     // 클릭 잡음을 없앤다 -- 합성 사운드라도 순수 파형을 그냥 잘라 붙이면 이 클릭

@@ -89,7 +89,12 @@ public class LoadingScreenUI : MonoBehaviour
             case SceneEventType.Unload:
                 SetOverlayActive(true);
                 break;
-            case SceneEventType.LoadComplete:
+            // LoadComplete는 "이 클라이언트 자신"의 로드가 끝난 시점이라, 다른
+            // 클라이언트(특히 느린 봇)가 아직 로딩 중이면 GameFlowManager의
+            // HandleLoadEventCompleted(전원 완료 후에만 MoveToSpawnPoint 호출)가
+            // 아직 실행되지 않은 상태다 -- 그 사이에 오버레이를 숨기면 플레이어가
+            // 잠깐 엉뚱한 위치에 서 있는 걸 보게 된다. 헤더 주석대로 전원이 끝나는
+            // 신호(LoadEventCompleted) 하나만 완료로 취급한다.
             case SceneEventType.LoadEventCompleted:
                 SetOverlayActive(false);
                 break;

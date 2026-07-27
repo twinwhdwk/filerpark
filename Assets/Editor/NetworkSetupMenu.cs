@@ -568,6 +568,13 @@ public static class NetworkSetupMenu
         stage.theme = theme;
         stage.minPlayers = minPlayers;
         stage.maxPlayers = maxPlayers;
+        // assetName은 모든 호출부에서 실제 게임플레이 씬 이름과 그대로 일치한다
+        // ("Stage01_Gatekeeper" 등) -- GameFlowManager.stageSceneNames가 참조하는
+        // 이름과 같은 문자열이므로 별도 파라미터 없이 재사용한다. 예전엔 이 필드를
+        // 애셋 YAML에 직접 손으로 채워 넣었는데, 이 프로젝트의 "전부 스크립트로
+        // 생성한다" 원칙(CLAUDE.md "Editor automation")을 깨는 방식이었다 -- 이
+        // 메뉴를 다시 실행해도 다음부터는 항상 올바르게 채워진다.
+        stage.sceneName = assetName;
 
         EditorUtility.SetDirty(stage);
         return stage;
