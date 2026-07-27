@@ -940,12 +940,18 @@ public static class GameFlowSceneSetup
             28, UITheme.ColorFg, TextAnchor.MiddleCenter, bodyMediumFont);
         subtitle.text = "PICO PARK 스타일 협동 퍼즐 플랫포머";
 
+        InputField nicknameField = CreateInputField(canvasObj.transform, "NicknameField", new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 10f), new Vector2(360f, 64f), "닉네임 (선택)");
+        NicknameFieldUI nicknameFieldUI = canvasObj.AddComponent<NicknameFieldUI>();
+        nicknameFieldUI.field = nicknameField;
+
         GameObject buttonObj = new GameObject("ConnectButton");
         buttonObj.transform.SetParent(canvasObj.transform, false);
         RectTransform buttonRect = buttonObj.AddComponent<RectTransform>();
         buttonRect.sizeDelta = new Vector2(320f, 90f);
         buttonRect.anchorMin = new Vector2(0.5f, 0.5f);
         buttonRect.anchorMax = new Vector2(0.5f, 0.5f);
+        buttonRect.anchoredPosition = new Vector2(0f, -100f);
 
         Image buttonImage = buttonObj.AddComponent<Image>();
         buttonImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonPrimary.png", UITheme.ColorPrimary, UITheme.ColorWhite);
@@ -957,6 +963,12 @@ public static class GameFlowSceneSetup
         Text label = CreateLabel(buttonObj.transform, "Label", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(320f, 90f),
             32, UITheme.ColorWhite, TextAnchor.MiddleCenter, bodyBoldFont, FontStyle.Bold);
         label.text = "서버 접속";
+
+        // 닉네임 저장이 접속보다 먼저 일어나야 한다 -- ConnectToServer가 곧바로
+        // StartClient()를 호출하고, 서버가 그 요청을 받아 Player Prefab을 스폰하면
+        // PlayerNicknameNGO.OnNetworkSpawn()이 그 즉시 PlayerProfile을 읽기 때문에,
+        // 순서가 바뀌면 방금 입력한 닉네임이 아니라 그 이전 값(또는 빈 값)이 나간다.
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(button.onClick, nicknameFieldUI.OnConnectClicked);
 
         NetworkBootstrapper bootstrapper = networkManagerObj.GetComponent<NetworkBootstrapper>();
         if (bootstrapper != null)
@@ -1014,6 +1026,43 @@ public static class GameFlowSceneSetup
         text.alignment = alignment;
         text.fontStyle = fontStyle;
         return text;
+    }
+
+    // 흰 배경 + 전경색 테두리의 입력칸. UI_ButtonPrimary.png와 같은 라운드-사각형
+    // SDF 스프라이트를 재사용하되 채움을 흰색으로 바꿔 "입력 가능한 칸"으로 보이게
+    // 한다 (버튼과 시각적으로 구분되도록).
+    private static InputField CreateInputField(Transform parent, string name, Vector2 anchor, Vector2 anchoredPosition, Vector2 size, string placeholderText)
+    {
+        GameObject fieldObj = new GameObject(name);
+        fieldObj.transform.SetParent(parent, false);
+        RectTransform rect = fieldObj.AddComponent<RectTransform>();
+        rect.anchorMin = anchor;
+        rect.anchorMax = anchor;
+        rect.pivot = anchor;
+        rect.anchoredPosition = anchoredPosition;
+        rect.sizeDelta = size;
+
+        Image bg = fieldObj.AddComponent<Image>();
+        bg.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_InputField.png", UITheme.ColorWhite, UITheme.ColorFg, 16f, 4f);
+        bg.type = Image.Type.Sliced;
+
+        Vector2 textSize = size - new Vector2(40f, 0f);
+        Color placeholderColor = new Color(UITheme.ColorFg.r, UITheme.ColorFg.g, UITheme.ColorFg.b, 0.4f);
+
+        Text placeholder = CreateLabel(fieldObj.transform, "Placeholder", new Vector2(0.5f, 0.5f), Vector2.zero, textSize,
+            26, placeholderColor, TextAnchor.MiddleCenter, bodyMediumFont, FontStyle.Italic);
+        placeholder.text = placeholderText;
+
+        Text valueText = CreateLabel(fieldObj.transform, "Text", new Vector2(0.5f, 0.5f), Vector2.zero, textSize,
+            26, UITheme.ColorFg, TextAnchor.MiddleCenter, bodyMediumFont);
+
+        InputField field = fieldObj.AddComponent<InputField>();
+        field.targetGraphic = bg;
+        field.textComponent = valueText;
+        field.placeholder = placeholder;
+        field.characterLimit = 12;
+
+        return field;
     }
 
     // 일시정지/설정/접속-끊김 오버레이가 공통으로 쓰는 배지형 버튼 -- ConnectButton과

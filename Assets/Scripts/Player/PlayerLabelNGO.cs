@@ -13,11 +13,30 @@ public class PlayerLabelNGO : NetworkBehaviour
     public Text label;
 
     private SpriteRenderer bodySprite;
+    private PlayerNicknameNGO nicknameComp;
     private float nextRefreshTime;
 
     public override void OnNetworkSpawn()
     {
         bodySprite = GetComponent<SpriteRenderer>();
+        nicknameComp = GetComponent<PlayerNicknameNGO>();
+        if (nicknameComp != null)
+        {
+            nicknameComp.nickname.OnValueChanged += HandleNicknameChanged;
+        }
+        RefreshLabel();
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        if (nicknameComp != null)
+        {
+            nicknameComp.nickname.OnValueChanged -= HandleNicknameChanged;
+        }
+    }
+
+    private void HandleNicknameChanged(Unity.Collections.FixedString32Bytes previousValue, Unity.Collections.FixedString32Bytes newValue)
+    {
         RefreshLabel();
     }
 
@@ -38,7 +57,8 @@ public class PlayerLabelNGO : NetworkBehaviour
             if (id < OwnerClientId) rank++;
         }
 
-        string text = $"P{rank + 1}";
+        string nicknameValue = nicknameComp != null ? nicknameComp.nickname.Value.ToString() : string.Empty;
+        string text = string.IsNullOrEmpty(nicknameValue) ? $"P{rank + 1}" : nicknameValue;
         if (label.text != text)
         {
             label.text = text;

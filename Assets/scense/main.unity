@@ -1824,6 +1824,7 @@ MonoBehaviour:
   descriptionText: {fileID: 800439154}
   themeTagText: {fileID: 1587798050}
   playerCountText: {fileID: 2080315367}
+  worldMap: {fileID: 0}
 --- !u!224 &1154229509
 RectTransform:
   m_ObjectHideFlags: 0

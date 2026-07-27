@@ -204,6 +204,7 @@ GameObject:
   - component: {fileID: 2275650426214143705}
   - component: {fileID: 6708032711124928053}
   - component: {fileID: 8215585556736334862}
+  - component: {fileID: 7414613957866770148}
   - component: {fileID: 5841204675865388984}
   - component: {fileID: 3567792290914632947}
   m_Layer: 6
@@ -479,6 +480,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9824125db48f59d468c5ee3b580c617a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerColorNGO
+  ShowTopMostFoldoutHeaderGroup: 1
+--- !u!114 &7414613957866770148
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7576499036739308593}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 16b4b3148885fd7469dcb2fe9142f671, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerNicknameNGO
   ShowTopMostFoldoutHeaderGroup: 1
 --- !u!114 &5841204675865388984
 MonoBehaviour:

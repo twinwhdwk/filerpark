@@ -112,6 +112,7 @@ public static class NetworkSetupMenu
         PlayerMovementNGO movement = go.AddComponent<PlayerMovementNGO>();
         go.AddComponent<PlayerSetupNGO>();
         go.AddComponent<PlayerColorNGO>();
+        go.AddComponent<PlayerNicknameNGO>();
         go.AddComponent<BotController>();
 
         // 머리 위 "P1"/"P2" 번호표 -- 색만으로는 구분하기 어려운 상황(작은 화면, 색약
