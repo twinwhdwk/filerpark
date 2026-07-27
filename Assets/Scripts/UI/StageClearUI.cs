@@ -60,6 +60,11 @@ public class StageClearUI : MonoBehaviour
         if (!newValue) return;
 
         AudioManager.Instance?.PlaySfx(SfxId.StageClear);
+        // 카메라 흔들림도 UI 배너/SFX와 같은 지점에서 건다 -- goalZone.stageCleared는
+        // 모든 클라이언트에 동일하게 복제되는 NetworkVariable이라 이 콜백 자체가 이미
+        // "모두가 같은 순간 보는" 지점이다. 순수 로컬 시각 효과라 Main Camera가 없는
+        // 상황(헤드리스 서버 등)만 방어적으로 걸러주면 된다.
+        Camera.main?.GetComponent<CoopCameraFollow>()?.Shake(0.25f, 0.3f);
         if (clearBanner == null) return;
 
         clearBanner.SetActive(true);

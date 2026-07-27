@@ -19,9 +19,32 @@ public class CoopCameraFollow : MonoBehaviour
     private Vector3 positionVelocity;
     private float zoomVelocity;
 
+    // 흔들림을 매 프레임 transform.position에 직접 더해버리면, 다음 프레임의 SmoothDamp가
+    // "흔들려서 어긋난 위치"를 새 시작점으로 삼아 그 오차를 쫓아가려 하면서 흔들림이
+    // 끝난 뒤에도 미묘하게 흔들린 채로 남거나 드리프트한다. 그래서 흔들림 없는 "진짜"
+    // 추적 위치를 따로 들고, 매 프레임 그 위에 흔들림 오프셋을 얹어서만 실제
+    // transform.position에 쓴다.
+    private Vector3 currentFollowPosition;
+
+    // 화면 흔들림 -- 지금까지 이 게임의 유일한 피드백은 UI 배너/SFX뿐이었다. 스테이지
+    // 클리어처럼 "한 방"이 있어야 할 순간에 화면 자체가 반응하지 않으면 밋밋하게
+    // 느껴진다. 순수 로컬 시각 효과라(네트워크 상태에 영향 없음) 각 클라이언트가
+    // 원하는 순간 자유롭게 걸 수 있다.
+    private float shakeDuration;
+    private float shakeTimeRemaining;
+    private float shakeMagnitude;
+
     private void Awake()
     {
         cam = GetComponent<Camera>();
+        currentFollowPosition = transform.position;
+    }
+
+    public void Shake(float magnitude, float duration)
+    {
+        shakeMagnitude = magnitude;
+        shakeDuration = duration;
+        shakeTimeRemaining = duration;
     }
 
     private void LateUpdate()
@@ -39,8 +62,19 @@ public class CoopCameraFollow : MonoBehaviour
             bounds.Encapsulate(players[i].transform.position);
         }
 
-        Vector3 targetPosition = new Vector3(bounds.center.x, bounds.center.y, transform.position.z);
-        transform.position = Vector3.SmoothDamp(transform.position, targetPosition, ref positionVelocity, positionSmoothTime);
+        Vector3 targetPosition = new Vector3(bounds.center.x, bounds.center.y, currentFollowPosition.z);
+        currentFollowPosition = Vector3.SmoothDamp(currentFollowPosition, targetPosition, ref positionVelocity, positionSmoothTime);
+
+        Vector3 shakeOffset = Vector3.zero;
+        if (shakeTimeRemaining > 0f)
+        {
+            shakeTimeRemaining -= Time.deltaTime;
+            // 선형으로 잦아들게 해서 뚝 끊기지 않고 자연스럽게 가라앉는다.
+            float falloff = shakeDuration > 0f ? Mathf.Clamp01(shakeTimeRemaining / shakeDuration) : 0f;
+            shakeOffset = (Vector3)Random.insideUnitCircle * shakeMagnitude * falloff;
+        }
+
+        transform.position = currentFollowPosition + shakeOffset;
 
         float verticalSize = bounds.size.y / 2f + padding;
         float horizontalSize = (bounds.size.x / 2f + padding) / cam.aspect;
