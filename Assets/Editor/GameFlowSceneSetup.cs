@@ -215,7 +215,7 @@ public static class GameFlowSceneSetup
         // 자연스럽게 눈에 들어오게 한다.
         Text controlsHint = CreateLabel(canvasObj.transform, "ControlsHint",
             new Vector2(0.5f, 0f), new Vector2(0f, 36f), new Vector2(900f, 40f),
-            22, new Color(UITheme.ColorFg.r, UITheme.ColorFg.g, UITheme.ColorFg.b, 0.6f),
+            22, UITheme.WithAlpha(UITheme.ColorFg, 0.6f),
             TextAnchor.MiddleCenter, bodyMediumFont);
         controlsHint.text = "조작법 - ←/→ 이동, Space 점프";
 
@@ -1061,7 +1061,7 @@ public static class GameFlowSceneSetup
         bg.type = Image.Type.Sliced;
 
         Vector2 textSize = size - new Vector2(40f, 0f);
-        Color placeholderColor = new Color(UITheme.ColorFg.r, UITheme.ColorFg.g, UITheme.ColorFg.b, 0.4f);
+        Color placeholderColor = UITheme.WithAlpha(UITheme.ColorFg, 0.4f);
 
         Text placeholder = CreateLabel(fieldObj.transform, "Placeholder", new Vector2(0.5f, 0.5f), Vector2.zero, textSize,
             26, placeholderColor, TextAnchor.MiddleCenter, bodyMediumFont, FontStyle.Italic);
@@ -1074,7 +1074,7 @@ public static class GameFlowSceneSetup
         field.targetGraphic = bg;
         field.textComponent = valueText;
         field.placeholder = placeholder;
-        field.characterLimit = 12;
+        field.characterLimit = PlayerProfile.MaxCharsWorstCase;
 
         return field;
     }
@@ -1260,22 +1260,24 @@ public static class GameFlowSceneSetup
         UnityEditor.Events.UnityEventTools.AddPersistentListener(musicSlider.onValueChanged, pauseMenu.OnMusicVolumeChanged);
         UnityEditor.Events.UnityEventTools.AddPersistentListener(sfxSlider.onValueChanged, pauseMenu.OnSfxVolumeChanged);
 
-        // 종료 확인 서브패널 -- 설정 패널과 같은 자리에 겹쳐 뜨는 작은 카드.
+        // 종료 확인 서브패널 -- 설정 패널과 똑같은 크기(480x460)로, 뒤에 깔린
+        // pausePanel의 "일시정지" 제목/버튼까지 완전히 덮어야 한다. 더 작게 잡았다가
+        // 카드 위쪽 제목이 삐져나와 보이는 문제가 실제로 있었다.
         GameObject quitConfirmPanel = new GameObject("QuitConfirmPanel");
         quitConfirmPanel.transform.SetParent(pausePanel.transform, false);
         RectTransform quitConfirmRect = quitConfirmPanel.AddComponent<RectTransform>();
         quitConfirmRect.anchorMin = new Vector2(0.5f, 0.5f);
         quitConfirmRect.anchorMax = new Vector2(0.5f, 0.5f);
-        quitConfirmRect.sizeDelta = new Vector2(480f, 280f);
+        quitConfirmRect.sizeDelta = new Vector2(480f, 460f);
         Image quitConfirmImage = quitConfirmPanel.AddComponent<Image>();
         quitConfirmImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
         quitConfirmImage.type = Image.Type.Sliced;
 
-        CreateLabel(quitConfirmPanel.transform, "QuitConfirmTitle", new Vector2(0.5f, 0.5f), new Vector2(0f, 80f), new Vector2(420f, 100f),
+        CreateLabel(quitConfirmPanel.transform, "QuitConfirmTitle", new Vector2(0.5f, 0.5f), new Vector2(0f, 100f), new Vector2(420f, 140f),
             28, UITheme.ColorFg, TextAnchor.MiddleCenter, bodyBoldFont, FontStyle.Bold).text = "정말 게임을 종료하시겠습니까?";
 
-        Button quitConfirmButton = CreateMenuButton(quitConfirmPanel.transform, "ConfirmButton", new Vector2(-125f, -60f), "종료", 200f);
-        Button quitCancelButton = CreateMenuButton(quitConfirmPanel.transform, "CancelButton", new Vector2(125f, -60f), "취소", 200f);
+        Button quitConfirmButton = CreateMenuButton(quitConfirmPanel.transform, "ConfirmButton", new Vector2(-125f, -40f), "종료", 200f);
+        Button quitCancelButton = CreateMenuButton(quitConfirmPanel.transform, "CancelButton", new Vector2(125f, -40f), "취소", 200f);
 
         UnityEditor.Events.UnityEventTools.AddPersistentListener(quitConfirmButton.onClick, pauseMenu.OnQuitConfirmed);
         UnityEditor.Events.UnityEventTools.AddPersistentListener(quitCancelButton.onClick, pauseMenu.OnQuitCancelled);

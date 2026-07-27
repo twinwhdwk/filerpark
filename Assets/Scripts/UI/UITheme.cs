@@ -20,6 +20,12 @@ public static class UITheme
     public static readonly Color ColorScrim = new Color(0f, 0f, 0f, 0.55f);
     public static readonly Color ColorScrimUrgent = new Color(0f, 0f, 0f, 0.7f);
 
+    // 스타일 가이드가 명시하는 "다양성은 새 색을 늘리는 게 아니라 이 토큰들의
+    // 명도/불투명도를 섞는 데서 나온다"를 실제로 구현하는 유일한 통로 -- 새 UI가
+    // 옅은/흐린 톤이 필요할 때마다 new Color(token.r, token.g, token.b, alpha)를
+    // 각자 인라인으로 만들지 않고 이걸 거치게 한다.
+    public static Color WithAlpha(Color color, float alpha) => new Color(color.r, color.g, color.b, alpha);
+
     // 모양 -- 버튼/카드 기본 라운드는 6px, 배지형 버튼의 테두리는 3px.
     public const int CornerRadiusDefault = 6;
     public const int CornerRadiusSmall = 3;

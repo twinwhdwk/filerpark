@@ -20,26 +20,13 @@ public class PlayerLabelNGO : NetworkBehaviour
     {
         bodySprite = GetComponent<SpriteRenderer>();
         nicknameComp = GetComponent<PlayerNicknameNGO>();
-        if (nicknameComp != null)
-        {
-            nicknameComp.nickname.OnValueChanged += HandleNicknameChanged;
-        }
         RefreshLabel();
     }
 
-    public override void OnNetworkDespawn()
-    {
-        if (nicknameComp != null)
-        {
-            nicknameComp.nickname.OnValueChanged -= HandleNicknameChanged;
-        }
-    }
-
-    private void HandleNicknameChanged(Unity.Collections.FixedString32Bytes previousValue, Unity.Collections.FixedString32Bytes newValue)
-    {
-        RefreshLabel();
-    }
-
+    // 닉네임이 바뀔 때마다 별도로 구독하지 않는다 -- 아래 Update()가 이미 0.5초마다
+    // RefreshLabel()을 불러 nicknameComp.nickname.Value를 다시 읽으므로, 이벤트
+    // 구독은 최대 0.5초의 지연을 줄이는 대가로 구독/해제 쌍을 하나 더 관리해야 하는
+    // 별도 경로만 늘릴 뿐이다.
     private void Update()
     {
         if (Time.time < nextRefreshTime) return;

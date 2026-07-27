@@ -42,6 +42,12 @@ public class StageManagerNGO : MonoBehaviour
         }
 
         if (hazard != null) hazard.ResetHazard(hazardSpawnPosition);
+
+        // 실패로 날린 시간이 StageClearUI의 클리어-타임 기록에 섞여 들어가지 않게
+        // 시계도 같이 리셋한다 -- 안 그러면 "실패 후 재도전"이 "쭉 이어진 한 판"처럼
+        // 집계돼 실제로는 더 느린 시도가 최고 기록으로 저장된다.
+        StageClearUI clearUI = Object.FindAnyObjectByType<StageClearUI>();
+        if (clearUI != null) clearUI.ResetTimer();
     }
 
     private void OnEnable()

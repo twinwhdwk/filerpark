@@ -27,7 +27,7 @@ public class StageClearUI : MonoBehaviour
 
     private void OnEnable()
     {
-        stageStartTime = Time.time;
+        ResetTimer();
 
         if (goalZone != null)
         {
@@ -45,6 +45,14 @@ public class StageClearUI : MonoBehaviour
         {
             goalZone.stageCleared.OnValueChanged -= HandleStageCleared;
         }
+    }
+
+    // StageManagerNGO.NotifyFailure()가 실패한 시도를 리셋할 때 부른다(탈출
+    // 카운트다운처럼 hasFailCondition이 있는 스테이지만) -- 안 그러면 실패로 날린
+    // 시간까지 기록에 합산돼 실제로는 느린 재도전이 "최고 기록"으로 저장된다.
+    public void ResetTimer()
+    {
+        stageStartTime = Time.time;
     }
 
     private void HandleStageCleared(bool previousValue, bool newValue)
@@ -92,10 +100,15 @@ public class StageClearUI : MonoBehaviour
         }
     }
 
+    // 분/초를 각각 따로 반올림하면(FloorToInt로 분을 자르고 나머지 초를 소수 첫째
+    // 자리로 반올림) 초가 59.95 이상일 때 "60.0"으로 올림되어 "1:60.0"처럼 표시될
+    // 수 있다. 전체를 0.1초 단위 정수로 먼저 반올림한 뒤 분/초로 나누면 그 경계에서도
+    // 항상 올바르게 자리올림된다.
     private static string FormatTime(float seconds)
     {
-        int minutes = Mathf.FloorToInt(seconds / 60f);
-        float remainder = seconds - minutes * 60f;
-        return $"{minutes}:{remainder:00.0}";
+        int totalTenths = Mathf.RoundToInt(seconds * 10f);
+        int minutes = totalTenths / 600;
+        float remainderSeconds = (totalTenths % 600) / 10f;
+        return $"{minutes}:{remainderSeconds:00.0}";
     }
 }

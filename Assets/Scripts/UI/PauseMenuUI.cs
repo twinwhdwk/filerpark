@@ -20,8 +20,19 @@ public class PauseMenuUI : MonoBehaviour
     public Slider musicSlider;
     public Slider sfxSlider;
 
-    private bool settingsOpen;
-    private bool quitConfirmOpen;
+    // 일시정지 카드 위에는 한 번에 서브패널 하나만 겹쳐 뜬다 -- ESC가 "가장 위에
+    // 열린 것 하나만" 닫도록, 서브패널마다 별도 bool을 두는 대신 단일 상태로
+    // 추적한다. 서브패널이 늘어나도 이 enum에 값 하나, PanelFor()에 매핑 하나만
+    // 더하면 된다.
+    private enum Overlay { None, Settings, QuitConfirm }
+    private Overlay activeOverlay = Overlay.None;
+
+    private GameObject PanelFor(Overlay overlay) => overlay switch
+    {
+        Overlay.Settings => settingsPanel,
+        Overlay.QuitConfirm => quitConfirmPanel,
+        _ => null,
+    };
 
     private void OnEnable()
     {
@@ -32,17 +43,17 @@ public class PauseMenuUI : MonoBehaviour
     {
         if (!Input.GetKeyDown(KeyCode.Escape)) return;
 
-        if (quitConfirmOpen)
+        switch (activeOverlay)
         {
-            OnQuitCancelled();
-        }
-        else if (settingsOpen)
-        {
-            CloseSettings();
-        }
-        else
-        {
-            TogglePause();
+            case Overlay.QuitConfirm:
+                OnQuitCancelled();
+                break;
+            case Overlay.Settings:
+                CloseSettings();
+                break;
+            default:
+                TogglePause();
+                break;
         }
     }
 
@@ -55,11 +66,7 @@ public class PauseMenuUI : MonoBehaviour
     private void SetPauseActive(bool active)
     {
         if (pausePanel != null) pausePanel.SetActive(active);
-        if (!active)
-        {
-            CloseSettingsImmediate();
-            CloseQuitConfirmImmediate();
-        }
+        if (!active) CloseOverlay();
     }
 
     public void OnResumeClicked()
@@ -71,8 +78,7 @@ public class PauseMenuUI : MonoBehaviour
     public void OnSettingsClicked()
     {
         PlayClick();
-        settingsOpen = true;
-        if (settingsPanel != null) settingsPanel.SetActive(true);
+        OpenOverlay(Overlay.Settings);
 
         if (AudioManager.Instance != null)
         {
@@ -96,13 +102,7 @@ public class PauseMenuUI : MonoBehaviour
     public void CloseSettings()
     {
         PlayClick();
-        CloseSettingsImmediate();
-    }
-
-    private void CloseSettingsImmediate()
-    {
-        settingsOpen = false;
-        if (settingsPanel != null) settingsPanel.SetActive(false);
+        CloseOverlay();
     }
 
     public void OnMasterVolumeChanged(float value) => AudioManager.Instance?.SetMasterVolume(value);
@@ -115,20 +115,28 @@ public class PauseMenuUI : MonoBehaviour
     public void OnQuitClicked()
     {
         PlayClick();
-        quitConfirmOpen = true;
-        if (quitConfirmPanel != null) quitConfirmPanel.SetActive(true);
+        OpenOverlay(Overlay.QuitConfirm);
     }
 
     public void OnQuitCancelled()
     {
         PlayClick();
-        CloseQuitConfirmImmediate();
+        CloseOverlay();
     }
 
-    private void CloseQuitConfirmImmediate()
+    private void OpenOverlay(Overlay overlay)
     {
-        quitConfirmOpen = false;
-        if (quitConfirmPanel != null) quitConfirmPanel.SetActive(false);
+        CloseOverlay();
+        activeOverlay = overlay;
+        GameObject panel = PanelFor(overlay);
+        if (panel != null) panel.SetActive(true);
+    }
+
+    private void CloseOverlay()
+    {
+        GameObject panel = PanelFor(activeOverlay);
+        if (panel != null) panel.SetActive(false);
+        activeOverlay = Overlay.None;
     }
 
     public void OnQuitConfirmed()
