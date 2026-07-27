@@ -274,7 +274,7 @@ public static class GameFlowSceneSetup
         overlayRect.offsetMax = Vector2.zero;
         Image overlayScrim = overlayRoot.AddComponent<Image>();
         overlayScrim.sprite = NetworkSetupMenu.GetOrCreatePlaceholderSprite();
-        overlayScrim.color = new Color(0f, 0f, 0f, 0.55f);
+        overlayScrim.color = UITheme.ColorScrim;
 
         WorldMapUI worldMap = overlayRoot.AddComponent<WorldMapUI>();
         worldMap.catalog = catalog;
@@ -1141,9 +1141,7 @@ public static class GameFlowSceneSetup
         pauseRect.offsetMax = Vector2.zero;
         Image scrim = pausePanel.AddComponent<Image>();
         scrim.sprite = NetworkSetupMenu.GetOrCreatePlaceholderSprite();
-        // 반투명 검정 스크림 -- 밝은 UI Style Guide의 유일한 예외(hazard 빨간색과
-        // 같은 성격): 모달 포커스를 위한 어두운 오버레이는 브랜드 팔레트와 무관하다.
-        scrim.color = new Color(0f, 0f, 0f, 0.55f);
+        scrim.color = UITheme.ColorScrim;
 
         GameObject card = new GameObject("Card");
         card.transform.SetParent(pausePanel.transform, false);
@@ -1276,7 +1274,7 @@ public static class GameFlowSceneSetup
         overlayRect.offsetMax = Vector2.zero;
         Image scrim = overlayPanel.AddComponent<Image>();
         scrim.sprite = NetworkSetupMenu.GetOrCreatePlaceholderSprite();
-        scrim.color = new Color(0f, 0f, 0f, 0.7f);
+        scrim.color = UITheme.ColorScrimUrgent;
 
         GameObject card = new GameObject("Card");
         card.transform.SetParent(overlayPanel.transform, false);

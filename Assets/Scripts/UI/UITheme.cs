@@ -14,6 +14,12 @@ public static class UITheme
     public static readonly Color ColorWhite = new Color32(0xff, 0xff, 0xff, 0xff);
     public static readonly Color ColorHighlightRing = new Color32(0xbf, 0xff, 0xde, 0xff);
 
+    // 모달 오버레이 뒤에 까는 반투명 검정 스크림 -- 밝은 UI Style Guide의 유일한
+    // 예외(hazard 빨간색과 같은 성격): 모달 포커스를 위한 어두운 오버레이는 브랜드
+    // 팔레트와 무관하다. 접속 끊김처럼 더 급한 정보는 Urgent로 더 어둡게 깐다.
+    public static readonly Color ColorScrim = new Color(0f, 0f, 0f, 0.55f);
+    public static readonly Color ColorScrimUrgent = new Color(0f, 0f, 0f, 0.7f);
+
     // 모양 -- 버튼/카드 기본 라운드는 6px, 배지형 버튼의 테두리는 3px.
     public const int CornerRadiusDefault = 6;
     public const int CornerRadiusSmall = 3;
