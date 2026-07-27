@@ -72,6 +72,17 @@ public class PauseMenuUI : MonoBehaviour
         }
     }
 
+    // 접속 화면의 "설정" 버튼용 진입점 -- settingsPanel이 pausePanel의 자식이라
+    // pausePanel부터 활성화해야 보인다. ESC로 들어왔을 때와 똑같이 Resume/Settings/
+    // Quit 카드가 뒤에 깔린 채로 열리지만(OnSettingsClicked을 그대로 재사용), 설정
+    // 패널이 같은 크기로 완전히 덮으면서 나중에 그려지므로 시각적으로도 입력
+    // 처리로도 동일하게 동작한다 -- ESC 경로에서 이미 검증된 것과 같은 상태다.
+    public void OpenSettingsDirectly()
+    {
+        if (pausePanel != null) pausePanel.SetActive(true);
+        OnSettingsClicked();
+    }
+
     public void CloseSettings()
     {
         PlayClick();

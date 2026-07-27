@@ -103,16 +103,19 @@ public static class GameFlowSceneSetup
         flow.lobbyCountdownSeconds = 5f;
         flow.resultsDisplaySeconds = 4f;
 
-        BuildConnectUI(nmObj);
-
         // 오디오/일시정지/접속-끊김 UI -- 전부 Bootstrap 씬(절대 언로드 안 됨)에
-        // 배치해서 Lobby/Stage 어디서든 동일하게 동작한다.
+        // 배치해서 Lobby/Stage 어디서든 동일하게 동작한다. BuildConnectUI보다 먼저
+        // 만드는 이유는, 접속 화면에도 설정 버튼을 하나 두어 PauseMenuUI의 설정
+        // 패널을 곧바로 열 수 있게 하기 위함 -- 그러려면 그 시점에 PauseMenuUI
+        // 인스턴스가 이미 존재해야 한다.
         GameObject audioManagerObj = new GameObject("AudioManager");
         audioManagerObj.AddComponent<AudioManager>();
 
         BuildLoadingScreenUI();
-        BuildPauseMenuUI();
+        PauseMenuUI pauseMenu = BuildPauseMenuUI();
         BuildConnectionStatusUI();
+
+        BuildConnectUI(nmObj, pauseMenu);
 
         EditorSceneManager.SaveScene(scene, BootstrapScenePath);
         ReopenAndResaveToFixNetworkObjectHashes(BootstrapScenePath);
@@ -895,7 +898,7 @@ public static class GameFlowSceneSetup
         }
     }
 
-    private static void BuildConnectUI(GameObject networkManagerObj)
+    private static void BuildConnectUI(GameObject networkManagerObj, PauseMenuUI pauseMenu)
     {
         LoadThemeFonts();
 
@@ -960,6 +963,35 @@ public static class GameFlowSceneSetup
         {
             UnityEditor.Events.UnityEventTools.AddPersistentListener(button.onClick, bootstrapper.ConnectToServer);
             bootstrapper.startMenuUI = canvasObj;
+        }
+
+        // 화면 우하단 작은 설정 버튼 -- 예전엔 음량 조절이 ESC로 여는 일시정지
+        // 메뉴에만 있어서, 아직 접속도 안 한 상태에서 "귀 아픈데 어떻게 줄이지"를
+        // 알아낼 방법이 키보드 단축키를 우연히 눌러보는 것뿐이었다. 접속 전에도
+        // 바로 보이는 버튼 하나로 발견 가능하게 한다.
+        if (pauseMenu != null)
+        {
+            GameObject settingsButtonObj = new GameObject("ConnectScreenSettingsButton");
+            settingsButtonObj.transform.SetParent(canvasObj.transform, false);
+            RectTransform settingsButtonRect = settingsButtonObj.AddComponent<RectTransform>();
+            settingsButtonRect.anchorMin = new Vector2(1f, 0f);
+            settingsButtonRect.anchorMax = new Vector2(1f, 0f);
+            settingsButtonRect.pivot = new Vector2(1f, 0f);
+            settingsButtonRect.anchoredPosition = new Vector2(-40f, 40f);
+            settingsButtonRect.sizeDelta = new Vector2(160f, 56f);
+
+            Image settingsButtonImage = settingsButtonObj.AddComponent<Image>();
+            settingsButtonImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonPrimary.png", UITheme.ColorIce, UITheme.ColorWhite);
+            settingsButtonImage.type = Image.Type.Sliced;
+
+            Button settingsButton = settingsButtonObj.AddComponent<Button>();
+            settingsButton.targetGraphic = settingsButtonImage;
+
+            Text settingsLabel = CreateLabel(settingsButtonObj.transform, "Label", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(160f, 56f),
+                24, UITheme.ColorWhite, TextAnchor.MiddleCenter, bodyBoldFont, FontStyle.Bold);
+            settingsLabel.text = "설정";
+
+            UnityEditor.Events.UnityEventTools.AddPersistentListener(settingsButton.onClick, pauseMenu.OpenSettingsDirectly);
         }
     }
 
@@ -1085,7 +1117,7 @@ public static class GameFlowSceneSetup
     // ESC로 여는 일시정지 메뉴 + 설정 서브패널. Bootstrap 씬에 배치되어 Lobby/Stage
     // 전환과 무관하게 항상 존재한다. 온라인 협동 게임이라 Time.timeScale은 건드리지
     // 않는다 (PauseMenuUI.cs 헤더 주석 참고).
-    private static void BuildPauseMenuUI()
+    private static PauseMenuUI BuildPauseMenuUI()
     {
         LoadThemeFonts();
 
@@ -1175,6 +1207,7 @@ public static class GameFlowSceneSetup
         pauseMenu.sfxSlider = sfxSlider;
 
         pausePanel.SetActive(false);
+        return pauseMenu;
     }
 
     // Lobby<->Stage 씬 전환(Unload -> 전원 대기 -> Load) 사이의 공백을 채우는 로딩
