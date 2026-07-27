@@ -54,6 +54,12 @@ public class BotController : NetworkBehaviour
     private RisingHazardNGO hazard;
     private CoopDoorNGO coopDoor;
     private CoopButtonNGO coopButton;
+    // Stage 5(쌍둥이 문지기)용 -- 버튼이 여럿인 스테이지에서 각 랭크가 서로 다른
+    // 버튼을 맡을 수 있도록, x좌표 오름차순으로 정렬해 캐시한다. FindObjectsByType의
+    // 배열 순서는 구현 세부사항이라 클라이언트마다 다를 수 있지만, 모든 클라이언트가
+    // 같은 씬 파일을 로드하는 한 x좌표 자체는 항상 동일하므로 정렬 후에는 모든
+    // 클라이언트가 같은 결론(같은 랭크 -> 같은 버튼)에 도달한다.
+    private CoopButtonNGO[] gatekeeperButtons = System.Array.Empty<CoopButtonNGO>();
 
     // PlayerSetupNGO.ActivePlayers를 그대로 참조한다(매 프레임 FindGameObjectsWithTag로
     // 새 배열을 할당하지 않도록) -- 하위 로직 다수가 매 StageAuto 프레임 이 목록을 읽는다.
@@ -211,9 +217,12 @@ public class BotController : NetworkBehaviour
         hazard = Object.FindAnyObjectByType<RisingHazardNGO>();
         coopDoor = Object.FindAnyObjectByType<CoopDoorNGO>();
         coopButton = Object.FindAnyObjectByType<CoopButtonNGO>();
+
+        gatekeeperButtons = Object.FindObjectsByType<CoopButtonNGO>(FindObjectsSortMode.None);
+        System.Array.Sort(gatekeeperButtons, (a, b) => a.transform.position.x.CompareTo(b.transform.position.x));
     }
 
-    // ------------------------------------------------------------------ Stage 1: 문지기
+    // ------------------------------------------------------------------ Stage 1/5: 문지기 계열
 
     // 솔루션: rank0이 버튼 위에 서서 문을 열어두고, 나머지는 문을 통과해 골 쪽으로 간다.
     // 골존이 맵 전체를 덮도록 설계돼 있어(현 지오메트리) rank0가 버튼을 떠나지 않아도
@@ -221,6 +230,14 @@ public class BotController : NetworkBehaviour
     // 그대로 보여주면서 100% 재현 가능하다.
     private void UpdateGatekeeper()
     {
+        // Stage 5(쌍둥이 문지기)는 같은 컴포넌트 조합(coopDoor+goal)을 쓰지만 문이
+        // 버튼 하나가 아니라 둘 다 필요하다 -- requiredButtons로 두 변형을 구분한다.
+        if (coopDoor != null && coopDoor.requiredButtons > 1)
+        {
+            UpdateTwinGatekeeper();
+            return;
+        }
+
         int rank = GetMyRank();
 
         if (rank == 0 && coopButton != null)
@@ -230,6 +247,23 @@ public class BotController : NetworkBehaviour
         }
 
         // 나머지: 문 너머로 이동(문이 닫혀 있으면 앞에서 대기하다 열리면 통과).
+        float targetX = coopDoor.transform.position.x + 2f;
+        MoveToward(targetX);
+    }
+
+    // 솔루션: rank0/rank1(x좌표 오름차순으로 정렬된 버튼 배열의 앞쪽 두 자리)이
+    // 각자 다른 버튼을 맡아 동시에 밟고, 나머지는 문 너머로 이동한다 -- Stage1과
+    // 동일한 "일부가 유지, 나머지가 통과" 구조를 인원만 둘로 늘린 것.
+    private void UpdateTwinGatekeeper()
+    {
+        int rank = GetMyRank();
+
+        if (rank < gatekeeperButtons.Length)
+        {
+            MoveToward(gatekeeperButtons[rank].transform.position.x);
+            return;
+        }
+
         float targetX = coopDoor.transform.position.x + 2f;
         MoveToward(targetX);
     }

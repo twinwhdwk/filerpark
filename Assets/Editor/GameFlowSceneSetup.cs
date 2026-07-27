@@ -27,6 +27,7 @@ public static class GameFlowSceneSetup
     private const string Stage02ScenePath = StagesFolder + "/Stage02_BlockCarry.unity";
     private const string Stage03ScenePath = StagesFolder + "/Stage03_KeyRelay.unity";
     private const string Stage04ScenePath = StagesFolder + "/Stage04_EscapeCountdown.unity";
+    private const string Stage05ScenePath = StagesFolder + "/Stage05_TwinGatekeeper.unity";
 
     private const string ServerAddress = "34.50.24.161";
     private const ushort ServerPort = 7777;
@@ -43,8 +44,9 @@ public static class GameFlowSceneSetup
         CreateStage02Scene();
         CreateStage03Scene();
         CreateStage04Scene();
+        CreateStage05Scene();
         ConfigureBuildSettingsScenes();
-        Debug.Log("[FlowSetup] Bootstrap/Lobby/Stage01-04 씬 생성 + Build Settings 구성 전체 완료.");
+        Debug.Log("[FlowSetup] Bootstrap/Lobby/Stage01-05 씬 생성 + Build Settings 구성 전체 완료.");
     }
 
     [MenuItem("Tools/Coop Setup/Multiplayer Flow/1. Create Bootstrap Scene")]
@@ -97,6 +99,7 @@ public static class GameFlowSceneSetup
             "Stage02_BlockCarry",
             "Stage03_KeyRelay",
             "Stage04_EscapeCountdown",
+            "Stage05_TwinGatekeeper",
         };
         flow.lobbySceneName = "Lobby";
         flow.minPlayersToStart = 1;
@@ -782,6 +785,88 @@ public static class GameFlowSceneSetup
         Debug.Log($"[FlowSetup] Stage04 씬 생성 완료: {Stage04ScenePath}");
     }
 
+    // Stage 5: 쌍둥이 문지기. Stage 1(문지기)과 같은 기믹(CoopButtonNGO/CoopDoorNGO/
+    // GoalZoneNGO)을 재사용하되, 버튼을 하나가 아니라 둘로 늘리고 CoopDoorNGO.
+    // requiredButtons를 기본값 2 그대로 쓴다(Stage1은 이 값을 1로 낮춰 썼다) --
+    // "버튼 하나를 누가 맡는가"에서 "서로 다른 두 사람이 동시에 각자의 버튼을
+    // 맡아야 한다"로 협동 난이도를 한 단계 올린 변형이다. 이미 검증된 컴포넌트만
+    // 새 배치로 조합했으므로 새 NetworkBehaviour 없이 새 스테이지 하나가 늘어난다.
+    // 봇 솔루션은 BotController.UpdateTwinGatekeeper() 참고.
+    [MenuItem("Tools/Coop Setup/Multiplayer Flow/8. Create Stage05 Scene (Twin Gatekeeper)")]
+    public static void CreateStage05Scene()
+    {
+        NetworkSetupMenu.EnsureFolder(StagesFolder);
+        LoadThemeFonts();
+
+        Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+        CreateOrthoCamera(true);
+
+        CreateGroundWithGrassCap(new Vector3(0f, -3f, 0f), new Vector3(18f, 1f, 1f),
+            new Color(0.45f, 0.32f, 0.2f), new Color(0.55f, 0.78f, 0.35f));
+
+        CreateSpawnPoints();
+
+        Sprite badgeSprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite(
+            "Assets/Sprites/UI_ButtonPrimary.png", UITheme.ColorPrimary, UITheme.ColorWhite);
+        Sprite tintableSprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite(
+            "Assets/Sprites/UI_RoundedWhite.png", Color.white, Color.white);
+
+        GameObject door = new GameObject("CoopDoor1");
+        door.transform.position = new Vector3(7f, -1.7f, 0f);
+        door.AddComponent<SpriteRenderer>();
+        ApplySlicedSprite(door, tintableSprite, new Vector2(0.45f, 1.3f));
+        BoxCollider2D doorCollider = door.AddComponent<BoxCollider2D>();
+        doorCollider.size = new Vector2(0.45f, 1.3f);
+        door.AddComponent<NetworkObject>();
+        CoopDoorNGO doorScript = door.AddComponent<CoopDoorNGO>();
+        doorScript.requiredButtons = 2;
+
+        // 버튼 두 개를 충분히 떨어뜨려 둔다 -- 한 사람이 동시에 두 버튼을 몸으로
+        // 겹쳐 밟을 수 없을 만큼(버튼 폭 0.9, 간격 6) 떨어져 있어야 "서로 다른 두
+        // 사람"이 실제로 강제된다.
+        Vector3[] buttonPositions = { new Vector3(-3f, -2.2f, 0f), new Vector3(3f, -2.2f, 0f) };
+        for (int i = 0; i < buttonPositions.Length; i++)
+        {
+            GameObject button = new GameObject($"CoopButton{i + 1}");
+            button.transform.position = buttonPositions[i];
+            button.AddComponent<SpriteRenderer>();
+            ApplySlicedSprite(button, badgeSprite, new Vector2(0.9f, 0.22f));
+            BoxCollider2D buttonCollider = button.AddComponent<BoxCollider2D>();
+            buttonCollider.isTrigger = true;
+            buttonCollider.size = new Vector2(0.9f, 0.22f);
+            button.AddComponent<NetworkObject>();
+            CoopButtonNGO buttonScript = button.AddComponent<CoopButtonNGO>();
+
+            UnityEditor.Events.UnityEventTools.AddPersistentListener(buttonScript.OnButtonPress, doorScript.AddPress);
+            UnityEditor.Events.UnityEventTools.AddPersistentListener(buttonScript.OnButtonRelease, doorScript.RemovePress);
+        }
+
+        // 골 존: Stage1과 동일한 폭 공식(스폰+Patrol 왕복 범위 전체를 덮음) -- 이미
+        // 검증된 값을 그대로 재사용한다(Stage1 주석 참고).
+        GameObject goalZone = new GameObject("GoalZone1");
+        goalZone.transform.position = new Vector3(0f, -2.2f, 0f);
+        goalZone.AddComponent<SpriteRenderer>();
+        ApplySlicedSprite(goalZone, tintableSprite, new Vector2(19f, 1.6f));
+        goalZone.GetComponent<SpriteRenderer>().color = new Color(
+            UITheme.ColorBgSecondary.r, UITheme.ColorBgSecondary.g, UITheme.ColorBgSecondary.b, 0.5f);
+        BoxCollider2D goalCollider = goalZone.AddComponent<BoxCollider2D>();
+        goalCollider.isTrigger = true;
+        goalCollider.size = new Vector2(19f, 1.6f);
+        goalZone.AddComponent<NetworkObject>();
+        GoalZoneNGO goalScript = goalZone.AddComponent<GoalZoneNGO>();
+
+        GameObject stageManagerObj = new GameObject("StageManager");
+        StageManagerNGO stageManager = stageManagerObj.AddComponent<StageManagerNGO>();
+        stageManager.goalZone = goalScript;
+
+        BuildStageUI(goalScript, "Stage 5 · Twin Gatekeeper");
+
+        EditorSceneManager.SaveScene(scene, Stage05ScenePath);
+        ReopenAndResaveToFixNetworkObjectHashes(Stage05ScenePath);
+        Debug.Log($"[FlowSetup] Stage05 씬 생성 완료: {Stage05ScenePath}");
+    }
+
     // 원래 Alteruna 템플릿의 기본 Unity 아이콘을 그대로 쓰고 있었다 -- 빌드된 .exe가
     // 작업표시줄/탐색기에서 다른 아무 Unity 프로젝트와 똑같이 보이는 건 "완성된 상용
     // 게임"이 아니라 "프로토타입"이라는 인상을 가장 먼저 준다. NetworkSetupMenu의
@@ -858,8 +943,9 @@ public static class GameFlowSceneSetup
             new EditorBuildSettingsScene(Stage02ScenePath, true),
             new EditorBuildSettingsScene(Stage03ScenePath, true),
             new EditorBuildSettingsScene(Stage04ScenePath, true),
+            new EditorBuildSettingsScene(Stage05ScenePath, true),
         };
-        Debug.Log("[FlowSetup] Build Settings 씬 목록: Bootstrap(0, 부팅 씬) -> Lobby -> Stage01~04.");
+        Debug.Log("[FlowSetup] Build Settings 씬 목록: Bootstrap(0, 부팅 씬) -> Lobby -> Stage01~05.");
     }
 
     private static void CreateSpawnPoints()

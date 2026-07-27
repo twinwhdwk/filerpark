@@ -23,4 +23,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Stages/Stage04_EscapeCountdown.unity
     guid: 24967af992568d5468c635402e9d3840
+  - enabled: 1
+    path: Assets/Scenes/Stages/Stage05_TwinGatekeeper.unity
+    guid: a939c391e5d904d4794f35fc9de44bad
   m_configObjects: {}

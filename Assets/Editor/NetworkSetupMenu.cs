@@ -532,6 +532,10 @@ public static class NetworkSetupMenu
                 "ESCAPE COUNTDOWN", "탈출 카운트다운",
                 "서서히 차오르는 용암을 피해 전원이 발맞춰 골까지 가야 한다. 낙오자가 생기면 전원 실패.",
                 StageTheme.SharedSurvival, 4, 6),
+            CreateOrUpdateStage(folder, "Stage05_TwinGatekeeper", "stage-05", 4,
+                "TWIN GATEKEEPER", "쌍둥이 문지기",
+                "서로 다른 두 사람이 각자의 버튼을 동시에 밟고 있어야 문이 열린다. 문지기보다 한 단계 더 엄격한 동시 입력.",
+                StageTheme.SimultaneousSwitches, 4, 6),
         };
 
         string catalogPath = folder + "/StageCatalog.asset";
