@@ -301,6 +301,7 @@ public static class GameFlowSceneSetup
         Image mapCardImage = mapCard.AddComponent<Image>();
         mapCardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
         mapCardImage.type = Image.Type.Sliced;
+        mapCard.AddComponent<UIPunchIn>();
 
         CreateLabel(mapCard.transform, "MapTitle", new Vector2(0.5f, 0.5f), new Vector2(0f, 230f), new Vector2(600f, 70f),
             44, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold).text = "스테이지 선택";
@@ -331,6 +332,7 @@ public static class GameFlowSceneSetup
         Image introCardImage = introCard.AddComponent<Image>();
         introCardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
         introCardImage.type = Image.Type.Sliced;
+        introCard.AddComponent<UIPunchIn>();
 
         Text introTitle = CreateLabel(introCard.transform, "IntroTitle", new Vector2(0.5f, 0.5f), new Vector2(0f, 230f), new Vector2(700f, 70f),
             44, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold);
@@ -488,6 +490,7 @@ public static class GameFlowSceneSetup
         bannerImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite(
             "Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorPrimary, 40f, 6f);
         bannerImage.type = Image.Type.Sliced;
+        banner.AddComponent<UIPunchIn>();
 
         Text clearText = CreateLabel(banner.transform, "ClearText", new Vector2(0.5f, 0.5f), new Vector2(0f, 70f), new Vector2(600f, 150f),
             90, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold);
@@ -1059,6 +1062,7 @@ public static class GameFlowSceneSetup
 
         Button button = buttonObj.AddComponent<Button>();
         button.targetGraphic = buttonImage;
+        buttonObj.AddComponent<UIButtonPunch>();
 
         Text label = CreateLabel(buttonObj.transform, "Label", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(320f, 90f),
             32, UITheme.ColorWhite, TextAnchor.MiddleCenter, bodyBoldFont, FontStyle.Bold);
@@ -1098,6 +1102,7 @@ public static class GameFlowSceneSetup
 
             Button settingsButton = settingsButtonObj.AddComponent<Button>();
             settingsButton.targetGraphic = settingsButtonImage;
+            settingsButtonObj.AddComponent<UIButtonPunch>();
 
             Text settingsLabel = CreateLabel(settingsButtonObj.transform, "Label", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(160f, 56f),
                 24, UITheme.ColorWhite, TextAnchor.MiddleCenter, bodyBoldFont, FontStyle.Bold);
@@ -1183,6 +1188,7 @@ public static class GameFlowSceneSetup
 
         Button button = buttonObj.AddComponent<Button>();
         button.targetGraphic = image;
+        buttonObj.AddComponent<UIButtonPunch>();
 
         Text text = CreateLabel(buttonObj.transform, "Label", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, 70f),
             28, UITheme.ColorWhite, TextAnchor.MiddleCenter, bodyBoldFont, FontStyle.Bold);
@@ -1301,6 +1307,7 @@ public static class GameFlowSceneSetup
         Image cardImage = card.AddComponent<Image>();
         cardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
         cardImage.type = Image.Type.Sliced;
+        card.AddComponent<UIPunchIn>();
 
         CreateLabel(card.transform, "PauseTitle", new Vector2(0.5f, 0.5f), new Vector2(0f, 170f), new Vector2(400f, 60f),
             40, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold).text = "일시정지";
@@ -1323,6 +1330,7 @@ public static class GameFlowSceneSetup
         Image settingsImage = settingsPanel.AddComponent<Image>();
         settingsImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
         settingsImage.type = Image.Type.Sliced;
+        settingsPanel.AddComponent<UIPunchIn>();
 
         CreateLabel(settingsPanel.transform, "SettingsTitle", new Vector2(0.5f, 0.5f), new Vector2(0f, 170f), new Vector2(400f, 60f),
             40, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold).text = "설정";
@@ -1358,6 +1366,7 @@ public static class GameFlowSceneSetup
         Image quitConfirmImage = quitConfirmPanel.AddComponent<Image>();
         quitConfirmImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
         quitConfirmImage.type = Image.Type.Sliced;
+        quitConfirmPanel.AddComponent<UIPunchIn>();
 
         CreateLabel(quitConfirmPanel.transform, "QuitConfirmTitle", new Vector2(0.5f, 0.5f), new Vector2(0f, 100f), new Vector2(420f, 140f),
             28, UITheme.ColorFg, TextAnchor.MiddleCenter, bodyBoldFont, FontStyle.Bold).text = "정말 게임을 종료하시겠습니까?";
@@ -1458,6 +1467,7 @@ public static class GameFlowSceneSetup
         Image cardImage = card.AddComponent<Image>();
         cardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
         cardImage.type = Image.Type.Sliced;
+        card.AddComponent<UIPunchIn>();
 
         Text message = CreateLabel(card.transform, "MessageLabel", new Vector2(0.5f, 0.5f), new Vector2(0f, 80f), new Vector2(440f, 140f),
             30, UITheme.ColorFg, TextAnchor.MiddleCenter, bodyBoldFont, FontStyle.Bold);

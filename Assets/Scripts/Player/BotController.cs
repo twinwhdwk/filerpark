@@ -98,6 +98,18 @@ public class BotController : NetworkBehaviour
     private bool recoveryForwardJumped;
     private float teammateBlockedSince = -1f;
 
+    // ---- 사람처럼 보이게 하는 개성치 (스폰 시 한 번만 뽑고 그 뒤로는 고정) ----
+    // 매 봇이 정확히 같은 속도로 똑같이 반응하면 "전략은 맞는데 로봇처럼 보인다"는
+    // 인상을 준다. 판정 로직/타겟 좌표는 절대 안 건드리고, 실행 감각만 사람처럼
+    // 개인차를 준다 -- 이미 검증된 스테이지 클리어 안정성을 건드리지 않기 위해
+    // (a) 순수 이동 속도 배율, (b) 도착 판정 여유폭, (c) 상태 변화를 알아챈 뒤
+    // 움직이기 시작하기까지의 반응 지연, 이 세 가지로 한정한다.
+    private float reflexSpeedScale = 1f;
+    private float arrivalTolerance = 0.2f;
+    private float reactionDelay;
+    private float doorOpenSince = -1f;
+    private float blockInPlaceSince = -1f;
+
     public override void OnNetworkSpawn()
     {
         if (!IsOwner)
@@ -113,6 +125,12 @@ public class BotController : NetworkBehaviour
         progressAnchorX = transform.position.x;
         lastProgressTime = Time.time;
         ScheduleNextJump();
+
+        // 사람마다 반사신경/걸음 폭이 조금씩 다르듯, 봇마다 고정된 개성치를 하나씩
+        // 뽑아둔다(합의가 필요 없는 순수 로컬 연출이라 서버 방송 없이 각자 뽑아도 무방).
+        reflexSpeedScale = Random.Range(0.85f, 1f);
+        arrivalTolerance = Random.Range(0.15f, 0.25f);
+        reactionDelay = Random.Range(0.05f, 0.35f);
     }
 
     private void Update()
@@ -198,6 +216,14 @@ public class BotController : NetworkBehaviour
         else if (goal != null) MoveToward(goal.transform.position.x); // 기믹 없는 골 전용 씬: 그냥 골로 모인다
         else UpdatePatrol();
 
+        // 순수 이동(비-회복) 구간에만 개인차 속도를 곱한다 -- 판정/타겟은 그대로 두고
+        // "얼마나 빨리 걷는가"만 사람마다 다르게 보이게 한다. 미는 대형(recoverySuppressed)
+        // 과 회복 기동은 각각 요구 인원 게이팅/탈출 신뢰성이 걸려 있어 원래 크기 그대로 둔다.
+        if (!recoverySuppressed)
+        {
+            HorizontalInput *= reflexSpeedScale;
+        }
+
         ApplyLocomotionRecovery();
     }
 
@@ -278,9 +304,21 @@ public class BotController : NetworkBehaviour
     private void UpdateBlockPush()
     {
         bool inPlace = block.isInPlace.Value;
+        if (inPlace && blockInPlaceSince < 0f) blockInPlaceSince = Time.time;
+        if (!inPlace) blockInPlaceSince = -1f;
 
         if (inPlace)
         {
+            // 블록이 자리 잡은 걸 알아채는 데도 사람처럼 반응 지연을 조금 둔다(각자
+            // reactionDelay만큼) -- 다 도착하자마자 전원이 프레임 단위로 똑같이 방향을
+            // 트는 게 아니라, 몇 프레임씩 어긋나게 건너기 시작한다. 판정/타겟은 그대로라
+            // 클리어 신뢰성에는 영향이 없다.
+            if (Time.time - blockInPlaceSince < reactionDelay)
+            {
+                HorizontalInput = 0f;
+                return;
+            }
+
             // 다리(블록)가 놓인 뒤 골로 걸어가는 구간. 블록/바닥 이음매(콜라이더 코너)에
             // 봇이 끼는 경우가 있는데, 이 구간은 회복 레이어를 기본값(켜짐) 그대로 둬서
             // 끼면 자동으로 후퇴+도움닫기로 빠져나온다. 블록을 Ground 레이어로 둔 덕에
@@ -327,7 +365,14 @@ public class BotController : NetworkBehaviour
 
         // --- 비운반자 ---
         bool doorOpen = keyDoor != null && keyDoor.isOpen.Value;
-        if (!doorOpen)
+        if (doorOpen && doorOpenSince < 0f) doorOpenSince = Time.time;
+        if (!doorOpen) doorOpenSince = -1f;
+
+        // 문이 열린 걸 알아채기까지도 사람마다 조금씩 다른 반응 지연(reactionDelay)을
+        // 준다 -- 어차피 스폰이 흩어져 있어 자연 시차가 나던 걸, 문이 열리는 순간에도
+        // 전원이 프레임 단위로 똑같이 반응하지 않게 한다. 시소 균형 규칙은 위치 기준
+        // 이라 이 지연 자체가 순서에 영향을 줄 뿐 안정성은 그대로다.
+        if (!doorOpen || Time.time - doorOpenSince < reactionDelay)
         {
             // 문이 열리기 전엔 제자리 대기(운반자가 열쇠를 문으로 가져올 때까지).
             // 스폰이 −6~6로 흩어져 있어, 대기 중 흩어진 채로 있다가 문이 열리면
@@ -511,7 +556,7 @@ public class BotController : NetworkBehaviour
     private void MoveToward(float targetX)
     {
         float dx = targetX - transform.position.x;
-        HorizontalInput = Mathf.Abs(dx) < 0.2f ? 0f : Mathf.Sign(dx);
+        HorizontalInput = Mathf.Abs(dx) < arrivalTolerance ? 0f : Mathf.Sign(dx);
     }
 
     // 접속한 Player 오브젝트 중 내 OwnerClientId보다 작은 것의 수 = 오름차순 정렬 시 내 순번.
