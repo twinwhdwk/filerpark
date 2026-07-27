@@ -12,9 +12,23 @@ public class StageClearUI : MonoBehaviour
     public GameObject clearBanner;
     public Text clearText;
     public Text clearSubText;
+    public Text clearTimeText;
+
+    // BuildStageUI가 넘겨주는 스테이지 라벨("Stage 1 · Gatekeeper" 등)을 그대로
+    // PlayerPrefs 키로 쓴다 -- 이미 스테이지마다 고유하므로 별도 ID 체계가 필요 없다.
+    // 순수 로컬 개인 기록이라 서버 동기화가 필요 없다: 클라이언트마다 자기 화면에
+    // 뜨는 시간만 재면 되고("이 판이 몇 초 걸렸나"), 누가 더 빠른지 겨루는 랭킹
+    // 기능이 아니다.
+    public string stageId;
+
+    private float stageStartTime;
+
+    private string BestTimeKey => $"BestTime_{stageId}";
 
     private void OnEnable()
     {
+        stageStartTime = Time.time;
+
         if (goalZone != null)
         {
             goalZone.stageCleared.OnValueChanged += HandleStageCleared;
@@ -54,5 +68,34 @@ public class StageClearUI : MonoBehaviour
         {
             clearSubText.text = "대기실로 돌아갑니다...";
         }
+
+        ReportClearTime();
+    }
+
+    private void ReportClearTime()
+    {
+        if (clearTimeText == null || string.IsNullOrEmpty(stageId)) return;
+
+        float elapsed = Time.time - stageStartTime;
+        float best = PlayerPrefs.GetFloat(BestTimeKey, float.MaxValue);
+        bool isNewRecord = elapsed < best;
+
+        if (isNewRecord)
+        {
+            PlayerPrefs.SetFloat(BestTimeKey, elapsed);
+            PlayerPrefs.Save();
+            clearTimeText.text = $"기록: {FormatTime(elapsed)} - NEW RECORD!";
+        }
+        else
+        {
+            clearTimeText.text = $"기록: {FormatTime(elapsed)} (최고 기록: {FormatTime(best)})";
+        }
+    }
+
+    private static string FormatTime(float seconds)
+    {
+        int minutes = Mathf.FloorToInt(seconds / 60f);
+        float remainder = seconds - minutes * 60f;
+        return $"{minutes}:{remainder:00.0}";
     }
 }

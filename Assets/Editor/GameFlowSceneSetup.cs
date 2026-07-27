@@ -471,23 +471,28 @@ public static class GameFlowSceneSetup
         RectTransform bannerRect = banner.AddComponent<RectTransform>();
         bannerRect.anchorMin = new Vector2(0.5f, 0.5f);
         bannerRect.anchorMax = new Vector2(0.5f, 0.5f);
-        bannerRect.sizeDelta = new Vector2(640f, 260f);
+        bannerRect.sizeDelta = new Vector2(640f, 340f);
         Image bannerImage = banner.AddComponent<Image>();
         bannerImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite(
             "Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorPrimary, 40f, 6f);
         bannerImage.type = Image.Type.Sliced;
 
-        Text clearText = CreateLabel(banner.transform, "ClearText", new Vector2(0.5f, 0.5f), new Vector2(0f, 30f), new Vector2(600f, 150f),
+        Text clearText = CreateLabel(banner.transform, "ClearText", new Vector2(0.5f, 0.5f), new Vector2(0f, 70f), new Vector2(600f, 150f),
             90, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold);
 
-        Text clearSubText = CreateLabel(banner.transform, "ClearSubText", new Vector2(0.5f, 0.5f), new Vector2(0f, -70f), new Vector2(560f, 60f),
-            26, UITheme.ColorFg, TextAnchor.MiddleCenter, bodyMediumFont);
+        Text clearTimeText = CreateLabel(banner.transform, "ClearTimeText", new Vector2(0.5f, 0.5f), new Vector2(0f, -40f), new Vector2(560f, 50f),
+            26, UITheme.ColorIce, TextAnchor.MiddleCenter, bodyBoldFont, FontStyle.Bold);
+
+        Text clearSubText = CreateLabel(banner.transform, "ClearSubText", new Vector2(0.5f, 0.5f), new Vector2(0f, -120f), new Vector2(560f, 50f),
+            22, UITheme.ColorFg, TextAnchor.MiddleCenter, bodyMediumFont);
 
         StageClearUI clearUI = canvasObj.AddComponent<StageClearUI>();
         clearUI.goalZone = goalZone;
         clearUI.clearBanner = banner;
         clearUI.clearText = clearText;
         clearUI.clearSubText = clearSubText;
+        clearUI.clearTimeText = clearTimeText;
+        clearUI.stageId = stageLabel;
     }
 
     [MenuItem("Tools/Coop Setup/Multiplayer Flow/5. Create Stage02 Scene (Block Carry)")]
