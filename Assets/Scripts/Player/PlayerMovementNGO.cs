@@ -17,6 +17,16 @@ public class PlayerMovementNGO : NetworkBehaviour
     // 영구 소프트락 대신 스폰 지점으로 되돌리는 안전망 한계선/복귀 높이.
     private const float FallLimitY = -20f;
     private const float SafeRespawnY = 2f;
+    // 씬 전환 중(Lobby 언로드 완료 ~ 다음 스테이지 로드 완료 사이) 아주 짧은 순간
+    // 어떤 씬에도 SpawnPoint 태그 오브젝트가 하나도 없는 창이 생긴다. 그 타이밍에
+    // 마침 중력으로 FallLimitY 밑까지 떨어진 플레이어가 있으면, 아래 안전망이 매
+    // FixedUpdate(초당 50회)마다 MoveToSpawnPoint()를 다시 불러 "SpawnPoint 태그가
+    // 없다" 경고를 무한 반복 스팸했다(실측: 봇 시뮬레이션 한 판에서 수십만 줄) --
+    // 재시도 자체는 스폰 지점이 다시 생기면 결국 성공하지만, 이 쿨다운 없이는 그
+    // 짧은 창 안에서만도 초당 50번씩 헛수고를 반복한다. 0.5초에 한 번으로만
+    // 제한해도 실제 복귀 지연은 체감되지 않는다.
+    private const float FallRecoveryRetryInterval = 0.5f;
+    private float nextFallRecoveryAttempt;
 
     // 코요테 타임(플랫폼 가장자리에서 막 벗어난 직후에도 잠깐 점프를 허용) + 점프
     // 버퍼링(착지 직전에 미리 누른 점프를 착지 즉시 실행) -- "isGrounded인 그 프레임에
@@ -101,8 +111,12 @@ public class PlayerMovementNGO : NetworkBehaviour
         if (transform.position.y < FallLimitY)
         {
             rb.linearVelocity = Vector2.zero;
-            if (setup != null) setup.MoveToSpawnPoint();
-            else transform.position = new Vector3(transform.position.x, SafeRespawnY, transform.position.z);
+            if (Time.time >= nextFallRecoveryAttempt)
+            {
+                nextFallRecoveryAttempt = Time.time + FallRecoveryRetryInterval;
+                if (setup != null) setup.MoveToSpawnPoint();
+                else transform.position = new Vector3(transform.position.x, SafeRespawnY, transform.position.z);
+            }
             return;
         }
 
