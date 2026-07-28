@@ -109,6 +109,9 @@ public class BotController : NetworkBehaviour
     private float reactionDelay;
     private float doorOpenSince = -1f;
     private float blockInPlaceSince = -1f;
+    // 새 스테이지에 막 들어온 순간을 표시한다 -- goal이 null(로비/전환 공백)에서
+    // non-null(스테이지 로드됨)로 바뀌는 프레임만 "새 스테이지 진입"으로 본다.
+    private float stageEnteredAt = -1f;
 
     public override void OnNetworkSpawn()
     {
@@ -203,9 +206,27 @@ public class BotController : NetworkBehaviour
 
     private void UpdateStageAuto()
     {
+        bool goalWasNull = goal == null;
         RefreshStageRefs();
+        if (goalWasNull && goal != null) stageEnteredAt = Time.time;
+        if (stageEnteredAt < 0f) stageEnteredAt = Time.time;
+
         players = PlayerSetupNGO.ActivePlayers;
         recoverySuppressed = false;
+
+        // 스테이지가 막 로드된 순간 곧바로 프레임 0부터 완벽한 정답 경로로 움직이면
+        // 딱 봐도 로봇처럼 보인다 -- 사람이라면 새 방을 잠깐 둘러본 뒤에 움직이기
+        // 시작한다. 개인차 reactionDelay(0.05~0.35초)만큼 그 "둘러보는 순간"을
+        // 재현한다. 판정/타겟 좌표는 전혀 안 건드리고 순수하게 이동 시작을 늦출
+        // 뿐이라, 회복 레이어(움직일 의사가 없을 때는 아무 것도 안 함)와도 충돌하지
+        // 않는다. Stage 4(탈출 카운트다운)의 해저드도 startDelay가 3초라 이 정도
+        // 지연은 시간 압박에 영향을 주지 않는다.
+        if (Time.time - stageEnteredAt < reactionDelay)
+        {
+            HorizontalInput = 0f;
+            ApplyLocomotionRecovery();
+            return;
+        }
 
         // 판별 순서는 각 스테이지가 가진 "고유" 기믹 기준. 4개 스테이지는 서로
         // 겹치는 기믹이 없어 이 순서로 정확히 하나만 매칭된다.
