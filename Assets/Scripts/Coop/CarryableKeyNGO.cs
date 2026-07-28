@@ -61,7 +61,13 @@ public class CarryableKeyNGO : NetworkBehaviour
         if (client.PlayerObject == null) return;
 
         float dist = Vector2.Distance(client.PlayerObject.transform.position, transform.position);
-        if (dist > pickupRadius) return;
+        if (dist > pickupRadius)
+        {
+            // PushableBlockNGO의 "대기 중" 상시 로그와 같은 취지 -- 왜 안 풀리는지
+            // 라이브 서버에서도 바로 보이게 남겨둔다(성공 시엔 조용함).
+            Debug.Log($"[CarryableKey] pickup 거부: client={requester} dist={dist:F2} (반경 {pickupRadius})");
+            return;
+        }
 
         carrierClientId.Value = requester;
     }

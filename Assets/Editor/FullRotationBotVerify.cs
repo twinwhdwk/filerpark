@@ -18,9 +18,14 @@ public static class FullRotationBotVerify
     private const string BootstrapScenePath = "Assets/Scenes/Bootstrap.unity";
     private const string ClientExePath = "ClientBuild/filerpark.exe";
     private const int BotCount = 4;
-    // 5개 스테이지를 순서대로 다 깨야 도달하므로(과거 4-스테이지 순환 실측이 ~9분),
-    // 넉넉하게 잡는다.
-    private const float TimeoutSeconds = 480f;
+    // 과거 "5봇 연속 순환 ~9분" 실측은 GCP 전용 서버 + 별도 머신의 봇 클라이언트
+    // 조합이었다. 이 도구는 배치 모드 Editor 호스트와 봇 클라이언트 4개(각각 별도
+    // 프로세스)를 전부 한 개발 머신에서 동시에 돌리므로, 특히 이 세션처럼 몇 시간째
+    // Unity를 연속으로 띄우고 내린 뒤라면 리소스 경합으로 그보다 훨씬 오래 걸릴 수
+    // 있다 -- 480초로는 Stage1~2를 통과하고 Stage3가 막 로드된 시점에 컷오프되는
+    // 걸 실제로 관측했다(스테이지 자체가 멈춘 게 아니라 예산이 부족했던 것). 로컬
+    // 환경의 실제 성능 한계를 반영해 넉넉하게 늘린다.
+    private const float TimeoutSeconds = 900f;
     private const int Stage5Index = 4; // stageSceneNames의 5번째 원소(0-indexed).
 
     private const string KeyActive = "FullRotationBotVerify.Active";
@@ -101,7 +106,11 @@ public static class FullRotationBotVerify
             if (currentIndex > maxSeen)
             {
                 SessionState.SetInt(KeyMaxStageSeen, currentIndex);
-                Debug.Log($"[FullRotationVerify] 진행 상황: currentStageIndex={currentIndex}에 도달.");
+                // 로그 줄 수는 스팸(예: 이전에 찾은 fall-recovery 버그) 유무에 따라 실제
+                // 경과 시간과 전혀 비례하지 않아 진행 속도를 오판하게 만들었다 -- 실제
+                // 경과 초를 직접 찍어야 "스테이지 하나에 몇 초 걸렸는지"를 신뢰할 수 있다.
+                float elapsed = (float)EditorApplication.timeSinceStartup - SessionState.GetFloat(KeyStartTime, (float)EditorApplication.timeSinceStartup);
+                Debug.Log($"[FullRotationVerify] 진행 상황: currentStageIndex={currentIndex}에 도달 (경과 {elapsed:F1}초).");
             }
 
             if (currentIndex == Stage5Index && GameFlowManager.Instance.phase.Value == GameFlowManager.GamePhase.Results)
