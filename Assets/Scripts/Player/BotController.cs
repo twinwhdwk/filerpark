@@ -524,6 +524,18 @@ public class BotController : NetworkBehaviour
     // 너무 앞서면 낙오자를 기다린다("제일 느린 사람에게 맞춘다"). 벽(0.3u/s)보다
     // 봇(5u/s)이 훨씬 빨라 시간 압박은 문제되지 않고, 관건은 전원이 동시에 골 안에
     // 모이는 것이다 -- 그래서 골에서 멈춰 뭉치게 한다.
+    //
+    // 허용 리드(AllowedLead)는 고정 상수가 아니라 해저드가 팀의 최후미(가장 뒤처진
+    // 팀원)에 얼마나 가까운지에 따라 매 프레임 조절한다 -- 사람이라면 위험이 아직
+    // 멀 때는 여유 있게 앞서가다가도, 벽이 낙오자 코앞까지 다가오면 자연히 더
+    // 바짝 붙어서 상황을 지켜본다. MinAllowedLead/MaxAllowedLead 사이로 항상
+    // clamp해서, 이 값이 예전 고정값(2.5)과 비슷한 범위를 벗어나지 않게 한다 --
+    // 봇이 해저드보다 압도적으로 빠르다는 이 스테이지의 핵심 안전 마진(위 주석)을
+    // 그대로 유지하면서, "왜 하필 2.5인가"에 상황 근거를 하나 더 얹는 것뿐이다.
+    private const float MinAllowedLead = 1.5f;
+    private const float MaxAllowedLead = 4f;
+    private const float HazardProximityToLeadScale = 0.4f;
+
     private void UpdateEscape()
     {
         if (goal == null)
@@ -545,8 +557,15 @@ public class BotController : NetworkBehaviour
         float teamMinX = float.MaxValue;
         foreach (GameObject p in players) teamMinX = Mathf.Min(teamMinX, p.transform.position.x);
 
+        float allowedLead = AllowedLead;
+        if (hazard != null)
+        {
+            float hazardDistanceToSlowest = Mathf.Max(0f, teamMinX - hazard.transform.position.x);
+            allowedLead = Mathf.Clamp(hazardDistanceToSlowest * HazardProximityToLeadScale, MinAllowedLead, MaxAllowedLead);
+        }
+
         // 팀을 너무 앞서면 멈춰서 기다린다(가장 뒤처진 봇은 myLead=0이라 항상 전진 -> 교착 없음).
-        HorizontalInput = (myX - teamMinX > AllowedLead) ? 0f : 1f;
+        HorizontalInput = (myX - teamMinX > allowedLead) ? 0f : 1f;
     }
 
     // ------------------------------------------------------------------ 공통 헬퍼
