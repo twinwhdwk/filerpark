@@ -1193,6 +1193,7 @@ public static class GameFlowSceneSetup
         field.textComponent = valueText;
         field.placeholder = placeholder;
         field.characterLimit = PlayerProfile.MaxCharsWorstCase;
+        fieldObj.AddComponent<UIInputFieldFocusRing>();
 
         return field;
     }
