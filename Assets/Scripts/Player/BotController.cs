@@ -208,7 +208,22 @@ public class BotController : NetworkBehaviour
     {
         bool goalWasNull = goal == null;
         RefreshStageRefs();
-        if (goalWasNull && goal != null) stageEnteredAt = Time.time;
+        if (goalWasNull && goal != null)
+        {
+            stageEnteredAt = Time.time;
+            // 봇이 씬에 있는 기믹만 보고 스스로 스테이지를 판별하는 구조라(클래스
+            // 상단 주석 참고), "이 봇이 지금 뭘 정답으로 골랐는지"가 겉으로는 전혀
+            // 안 보인다 -- 의도한 스테이지가 아닌 다른 걸로 오판했는지 여부를 로그
+            // 없이는 확인할 방법이 없었다. 스테이지가 바뀔 때(goal이 새로 생길 때)
+            // 딱 한 번만 남긴다.
+            string detected = hazard != null ? "Escape(해저드)"
+                : block != null ? "BlockPush(돌덩이)"
+                : key != null ? "KeyRelay(열쇠)"
+                : coopDoor != null && coopDoor.requiredButtons > 1 ? "TwinGatekeeper(쌍둥이 문지기)"
+                : coopDoor != null ? "Gatekeeper(문지기)"
+                : "GoalOnly(기믹 없음)";
+            Debug.Log($"[Bot] clientId={OwnerClientId} rank={GetMyRank()} 스테이지 감지: {detected}");
+        }
         if (stageEnteredAt < 0f) stageEnteredAt = Time.time;
 
         players = PlayerSetupNGO.ActivePlayers;

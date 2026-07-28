@@ -16,6 +16,7 @@ public class PlayerSetupNGO : NetworkBehaviour
 
         if (IsServer)
         {
+            Debug.Log($"[PlayerSetup] 플레이어 스폰: clientId={OwnerClientId} (현재 {ActivePlayers.Count}명)");
             MoveToSpawnPoint();
         }
     }
@@ -23,6 +24,11 @@ public class PlayerSetupNGO : NetworkBehaviour
     public override void OnNetworkDespawn()
     {
         ActivePlayers.Remove(gameObject);
+
+        if (IsServer)
+        {
+            Debug.Log($"[PlayerSetup] 플레이어 디스폰: clientId={OwnerClientId} (남은 {ActivePlayers.Count}명)");
+        }
     }
 
     // GameFlowManager가 Lobby<->Stage 전환마다(씬 로드 완료 후) 호출해서, 현재
@@ -42,7 +48,10 @@ public class PlayerSetupNGO : NetworkBehaviour
         }
         else
         {
-            Debug.LogWarning("현재 로드된 씬에 'SpawnPoint' 태그를 가진 오브젝트가 없습니다!");
+            // 어느 클라이언트가 걸렸는지 몰라 원인 조사가 오래 걸린 적이 있어(씬 전환
+            // 사이 창에서 낙사한 특정 플레이어를 이 경고만으로는 구분할 수 없었다)
+            // clientId를 같이 남긴다.
+            Debug.LogWarning($"[PlayerSetup] clientId={OwnerClientId}: 현재 로드된 씬에 'SpawnPoint' 태그를 가진 오브젝트가 없습니다!");
         }
     }
 }

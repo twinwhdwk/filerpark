@@ -56,7 +56,14 @@ public class NetworkBootstrapper : MonoBehaviour
     public void ConnectToServer()
     {
         Debug.Log("[Client] 서버에 접속을 시도합니다...");
-        NetworkManager.Singleton.StartClient();
+        // StartClient()의 반환값을 지금까지 아무도 확인하지 않았다 -- 실패해도(트랜스포트
+        // 초기화 실패 등) 조용히 무시되고 접속 화면만 닫혀서, "눌렀는데 아무 일도 안
+        // 일어남"으로만 보이는 원인 불명 버그처럼 느껴졌다. 실패는 실패라고 로그로 남긴다.
+        bool started = NetworkManager.Singleton.StartClient();
+        if (!started)
+        {
+            Debug.LogError("[Client] StartClient() 실패 -- 트랜스포트 초기화에 문제가 있을 수 있습니다.");
+        }
 
         if (startMenuUI != null)
         {

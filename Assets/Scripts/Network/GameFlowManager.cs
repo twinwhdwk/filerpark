@@ -107,6 +107,16 @@ public class GameFlowManager : NetworkBehaviour
     // 접속 해제된 플레이어가 계속 표시되는 게 눈에 보이는 증상이다.
     private void HandleClientDisconnected(ulong clientId)
     {
+        // 서버 로그에서만 남긴다 -- 이 콜백은 NGO가 서버/클라이언트 모두에서 부르므로,
+        // 게이팅 없이 로그하면 접속 인원만큼 같은 이벤트가 여러 번 중복 출력된다.
+        // 접속 끊김 원인 조사 때 "지금 몇 명 남았는지"가 매번 궁금했던 지점이라
+        // 남은 인원 수까지 같이 남긴다.
+        if (IsServer)
+        {
+            int remaining = NetworkManager.Singleton.ConnectedClientsIds.Count;
+            Debug.Log($"[GameFlow] 클라이언트 접속 해제: clientId={clientId} (남은 인원 {remaining}명)");
+        }
+
         if (scores.Remove(clientId))
         {
             BroadcastScoreboard();
@@ -154,6 +164,12 @@ public class GameFlowManager : NetworkBehaviour
 
     private void HandleClientConnected(ulong clientId)
     {
+        if (IsServer)
+        {
+            int connected = NetworkManager.Singleton.ConnectedClientsIds.Count;
+            Debug.Log($"[GameFlow] 클라이언트 접속: clientId={clientId} (접속 {connected}명, phase={phase.Value})");
+        }
+
         if (!scores.ContainsKey(clientId))
         {
             scores[clientId] = 0;
