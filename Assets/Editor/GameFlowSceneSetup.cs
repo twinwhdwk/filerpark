@@ -501,6 +501,32 @@ public static class GameFlowSceneSetup
         Text clearSubText = CreateLabel(banner.transform, "ClearSubText", new Vector2(0.5f, 0.5f), new Vector2(0f, -120f), new Vector2(560f, 50f),
             22, UITheme.ColorFg, TextAnchor.MiddleCenter, bodyMediumFont);
 
+        // 실패 배너 -- 클리어 배너와 짝을 맞춘 카드. Stage 4(탈출 카운트다운)의
+        // RisingHazardNGO만 실제로 이걸 띄우지만(hasFailCondition이 꺼진 나머지
+        // 스테이지는 절대 호출되지 않음), 배너 자체는 clearBanner와 동일하게 모든
+        // 스테이지 씬에 공통으로 둔다 -- BuildStageUI가 이식성 있게 유지되도록.
+        // 이전까지는 낙오해도 SFX만 나고 화면 안내가 전혀 없이 조용히 스폰 지점으로
+        // 순간이동했다 -- 왜 갑자기 되돌아갔는지 설명이 없는 상태였다.
+        GameObject failBanner = new GameObject("FailBanner");
+        failBanner.transform.SetParent(canvasObj.transform, false);
+        RectTransform failBannerRect = failBanner.AddComponent<RectTransform>();
+        failBannerRect.anchorMin = new Vector2(0.5f, 0.5f);
+        failBannerRect.anchorMax = new Vector2(0.5f, 0.5f);
+        failBannerRect.sizeDelta = new Vector2(560f, 200f);
+        Image failBannerImage = failBanner.AddComponent<Image>();
+        // 위험 신호는 브랜드 팔레트의 의도된 예외다 (RisingHazardNGO의 빨간 해저드
+        // 색과 동일 계열 -- CLAUDE.md UI Style Guide 참고).
+        failBannerImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite(
+            "Assets/Sprites/UI_FailBanner.png", UITheme.ColorBg, new Color(0.9f, 0.25f, 0.15f, 1f), 40f, 6f);
+        failBannerImage.type = Image.Type.Sliced;
+        failBanner.AddComponent<UIPunchIn>();
+
+        Text failText = CreateLabel(failBanner.transform, "FailText", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(520f, 160f),
+            48, new Color(0.9f, 0.25f, 0.15f, 1f), TextAnchor.MiddleCenter, headingFont, FontStyle.Bold);
+        failText.text = "다시 도전!";
+
+        failBanner.SetActive(false);
+
         StageClearUI clearUI = canvasObj.AddComponent<StageClearUI>();
         clearUI.goalZone = goalZone;
         clearUI.clearBanner = banner;
@@ -508,6 +534,7 @@ public static class GameFlowSceneSetup
         clearUI.clearSubText = clearSubText;
         clearUI.clearTimeText = clearTimeText;
         clearUI.stageId = stageLabel;
+        clearUI.failBanner = failBanner;
     }
 
     [MenuItem("Tools/Coop Setup/Multiplayer Flow/5. Create Stage02 Scene (Block Carry)")]

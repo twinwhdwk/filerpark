@@ -53,6 +53,9 @@ public class RisingHazardNGO : NetworkBehaviour
     private void PlayFailSfxClientRpc()
     {
         AudioManager.Instance?.PlaySfx(SfxId.StageFail);
+        // 실패해도 SFX만 나고 화면엔 아무 설명 없이 스폰 지점으로 조용히 되돌아갔다 --
+        // 클리어 배너와 짝을 맞춘 짧은 안내 배너를 같은 지점에서 띄운다.
+        Object.FindAnyObjectByType<StageClearUI>()?.ShowFailBanner();
     }
 
     public void ResetHazard(Vector3 spawnPosition)

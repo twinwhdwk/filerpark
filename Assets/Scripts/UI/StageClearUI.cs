@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -13,6 +14,11 @@ public class StageClearUI : MonoBehaviour
     public Text clearText;
     public Text clearSubText;
     public Text clearTimeText;
+
+    [Header("실패 배너 (탈출 카운트다운 등 hasFailCondition 스테이지만 실제로 사용)")]
+    public GameObject failBanner;
+    private Coroutine failBannerRoutine;
+    private const float FailBannerSeconds = 1.5f;
 
     // BuildStageUI가 넘겨주는 스테이지 라벨("Stage 1 · Gatekeeper" 등)을 그대로
     // PlayerPrefs 키로 쓴다 -- 이미 스테이지마다 고유하므로 별도 ID 체계가 필요 없다.
@@ -37,6 +43,28 @@ public class StageClearUI : MonoBehaviour
         {
             clearBanner.SetActive(false);
         }
+        if (failBanner != null)
+        {
+            failBanner.SetActive(false);
+        }
+    }
+
+    // RisingHazardNGO.PlayFailSfxClientRpc()가 실패 SFX와 같은 지점에서 호출한다 --
+    // 그때까지는 실패해도 소리만 나고 화면엔 아무 설명 없이 스폰 지점으로 조용히
+    // 되돌아갔다. 클리어 배너와 짝을 맞춘 짧은 배너로 "왜 되돌아갔는지"를 보여준다.
+    public void ShowFailBanner()
+    {
+        if (failBanner == null) return;
+        if (failBannerRoutine != null) StopCoroutine(failBannerRoutine);
+        failBannerRoutine = StartCoroutine(FailBannerRoutine());
+    }
+
+    private IEnumerator FailBannerRoutine()
+    {
+        failBanner.SetActive(true);
+        yield return new WaitForSecondsRealtime(FailBannerSeconds);
+        failBanner.SetActive(false);
+        failBannerRoutine = null;
     }
 
     private void OnDisable()
