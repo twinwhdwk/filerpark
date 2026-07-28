@@ -280,13 +280,47 @@ public class BotController : NetworkBehaviour
     // 솔루션: rank0/rank1(x좌표 오름차순으로 정렬된 버튼 배열의 앞쪽 두 자리)이
     // 각자 다른 버튼을 맡아 동시에 밟고, 나머지는 문 너머로 이동한다 -- Stage1과
     // 동일한 "일부가 유지, 나머지가 통과" 구조를 인원만 둘로 늘린 것.
+    //
+    // 배정은 랭크 순서 고정이 아니라 "누가 더 가까운가"로 결정한다 -- 실제 사람이라면
+    // 자기가 반대쪽 버튼에 훨씬 더 가깝게 스폰됐는데 굳이 먼 버튼으로 걸어가지 않는다.
+    // 다만 이 판단은 신뢰도 문제가 있다: 상대 봇의 위치는 NetworkTransform 보간을 거친
+    // 값이라 클라이언트마다 살짝(서브유닛 단위) 다르게 보일 수 있고, 두 클라이언트가
+    // "누가 더 가까운지"를 다르게 판단하면 버튼 하나가 비거나 둘 다 겹쳐 스테이지가
+    // 영영 안 풀릴 수 있다. 그래서 SwapMargin(1유닛) 이상 확실히 차이 날 때만
+    // 스왑하고, 애매하면 항상 원래(이미 검증된) 랭크 순서로 되돌아간다 -- 최악의
+    // 경우에도 예전과 똑같이 동작할 뿐, 더 나빠지지는 않는다.
+    private const float TwinGatekeeperSwapMargin = 1f;
+
     private void UpdateTwinGatekeeper()
     {
         int rank = GetMyRank();
 
-        if (rank < gatekeeperButtons.Length)
+        if (rank == 0 || rank == 1)
         {
-            MoveToward(gatekeeperButtons[rank].transform.position.x);
+            int assignedIndex = rank;
+
+            if (gatekeeperButtons.Length >= 2)
+            {
+                GameObject rank0Obj = FindPlayerByRank(0);
+                GameObject rank1Obj = FindPlayerByRank(1);
+
+                if (rank0Obj != null && rank1Obj != null)
+                {
+                    float rank0ToNear = Mathf.Abs(rank0Obj.transform.position.x - gatekeeperButtons[0].transform.position.x);
+                    float rank0ToFar = Mathf.Abs(rank0Obj.transform.position.x - gatekeeperButtons[1].transform.position.x);
+                    float rank1ToNear = Mathf.Abs(rank1Obj.transform.position.x - gatekeeperButtons[0].transform.position.x);
+                    float rank1ToFar = Mathf.Abs(rank1Obj.transform.position.x - gatekeeperButtons[1].transform.position.x);
+
+                    // 둘 다 "반대쪽이 확실히 더 가깝다"고 동시에 동의할 때만 통째로 맞바꾼다
+                    // (부분 스왑은 절대 안 함 -- 한쪽만 스왑하면 버튼 하나가 비거나 겹친다).
+                    bool bothPreferSwap = (rank0ToFar + TwinGatekeeperSwapMargin < rank0ToNear)
+                        && (rank1ToNear + TwinGatekeeperSwapMargin < rank1ToFar);
+
+                    if (bothPreferSwap) assignedIndex = rank == 0 ? 1 : 0;
+                }
+            }
+
+            MoveToward(gatekeeperButtons[assignedIndex].transform.position.x);
             return;
         }
 
@@ -570,6 +604,28 @@ public class BotController : NetworkBehaviour
             if (no != null && no.OwnerClientId < OwnerClientId) rank++;
         }
         return rank;
+    }
+
+    // GetMyRank()의 역방향 -- "이 랭크를 가진 Player 오브젝트"를 찾는다. 쌍둥이
+    // 문지기의 거리 기반 배정처럼, 나 자신이 아닌 다른 특정 랭크의 실제 위치가
+    // 필요한 경우에만 쓴다.
+    private GameObject FindPlayerByRank(int targetRank)
+    {
+        foreach (GameObject candidate in players)
+        {
+            NetworkObject candidateNo = candidate.GetComponent<NetworkObject>();
+            if (candidateNo == null) continue;
+
+            int candidateRank = 0;
+            foreach (GameObject other in players)
+            {
+                NetworkObject otherNo = other.GetComponent<NetworkObject>();
+                if (otherNo != null && otherNo.OwnerClientId < candidateNo.OwnerClientId) candidateRank++;
+            }
+
+            if (candidateRank == targetRank) return candidate;
+        }
+        return null;
     }
 
     private bool AllOthersAcross(float acrossX)

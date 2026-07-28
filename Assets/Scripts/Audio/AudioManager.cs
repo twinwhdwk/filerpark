@@ -153,10 +153,16 @@ public class AudioManager : MonoBehaviour
         musicFadeRoutine = null;
     }
 
+    // 세 세터 모두 PlayerPrefs.Save()를 즉시 호출한다 -- Unity의 자동 저장(주기적/종료 시)에
+    // 맡기면, 이 프로젝트에서 이미 실측된 "하드 프로세스 킬" 시나리오(봇 클라이언트 강제
+    // 종료 테스트 등, CLAUDE.md 참고)와 똑같이 사람도 슬라이더만 만지고 정상 종료 없이
+    // 창을 닫아버릴 수 있어, 그사이 볼륨 설정이 저장되지 않고 날아갈 수 있다.
+    // StageClearUI의 최고 기록 저장과 동일한 패턴으로 맞춘다.
     public void SetMasterVolume(float value)
     {
         MasterVolume = Mathf.Clamp01(value);
         PlayerPrefs.SetFloat(PrefMaster, MasterVolume);
+        PlayerPrefs.Save();
         ApplyMusicVolume();
     }
 
@@ -164,6 +170,7 @@ public class AudioManager : MonoBehaviour
     {
         MusicVolume = Mathf.Clamp01(value);
         PlayerPrefs.SetFloat(PrefMusic, MusicVolume);
+        PlayerPrefs.Save();
         ApplyMusicVolume();
     }
 
@@ -171,6 +178,7 @@ public class AudioManager : MonoBehaviour
     {
         SfxVolume = Mathf.Clamp01(value);
         PlayerPrefs.SetFloat(PrefSfx, SfxVolume);
+        PlayerPrefs.Save();
     }
 
     // 페이드가 진행 중일 때는 건드리지 않는다 -- 슬라이더 조작 도중 크로스페이드가

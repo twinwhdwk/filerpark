@@ -23,12 +23,14 @@ public class WorldMapUI : MonoBehaviour
             return;
         }
 
+        PlayClick();
         if (mapPanel != null) mapPanel.SetActive(false);
         stageIntro.Show(catalog.stages[index]);
     }
 
     public void ReturnToMap()
     {
+        PlayClick();
         if (stageIntro != null) stageIntro.gameObject.SetActive(false);
         if (mapPanel != null) mapPanel.SetActive(true);
     }
@@ -38,6 +40,7 @@ public class WorldMapUI : MonoBehaviour
     // 가정하고 그 안의 맵 카드/인트로 카드끼리만 전환한다.
     public void OpenMap()
     {
+        PlayClick();
         gameObject.SetActive(true);
         if (mapPanel != null) mapPanel.SetActive(true);
         if (stageIntro != null) stageIntro.gameObject.SetActive(false);
@@ -45,6 +48,12 @@ public class WorldMapUI : MonoBehaviour
 
     public void CloseMap()
     {
+        PlayClick();
         gameObject.SetActive(false);
     }
+
+    // 일시정지 메뉴(PauseMenuUI.PlayClick)와 동일한 패턴 -- 이 화면의 모든 버튼이
+    // 눌릴 때 공통으로 거친다. 지금까지 월드맵/스테이지 인트로만 다른 메뉴들과 달리
+    // 클릭 사운드가 전혀 없었다(구현 당시 누락).
+    private static void PlayClick() => AudioManager.Instance?.PlaySfx(SfxId.UIClick);
 }

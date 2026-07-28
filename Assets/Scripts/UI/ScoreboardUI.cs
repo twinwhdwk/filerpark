@@ -47,11 +47,33 @@ public class ScoreboardUI : MonoBehaviour
         dirty = true;
     }
 
+    // 점수가 바뀌었을 때 텍스트만 조용히 갈아끼우면 놓치기 쉽다 -- 짧은 스케일 펄스로
+    // "방금 바뀌었다"는 걸 눈에 띄게 한다. UIPunchIn과 달리 SetActive로 트리거되는
+    // 것이 아니라(이 오브젝트는 계속 활성 상태) 데이터 변경(dirty) 시점에 직접 건다.
+    private const float PulseDuration = 0.2f;
+    private const float PulseScale = 1.12f;
+    private float pulseStartTime = -1f;
+
     private void Update()
     {
-        if (scoreText == null || !dirty) return;
-        dirty = false;
+        if (scoreText != null && dirty)
+        {
+            dirty = false;
+            RedrawScoreText();
+            pulseStartTime = Time.unscaledTime;
+        }
 
+        if (pulseStartTime >= 0f)
+        {
+            float t = Mathf.Clamp01((Time.unscaledTime - pulseStartTime) / PulseDuration);
+            float scale = Mathf.Lerp(PulseScale, 1f, t);
+            scoreText.transform.localScale = Vector3.one * scale;
+            if (t >= 1f) pulseStartTime = -1f;
+        }
+    }
+
+    private void RedrawScoreText()
+    {
         if (LatestScores.Count == 0)
         {
             scoreText.text = "<i>아직 접속한 플레이어가 없습니다</i>";
