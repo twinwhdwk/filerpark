@@ -15,6 +15,8 @@ using Unity.Netcode;
 public class LoadingScreenUI : MonoBehaviour
 {
     public GameObject overlayPanel;
+    public CanvasGroup overlayCanvasGroup;
+    public RectTransform spinner;
     public Text messageText;
 
     // 무슨 이유로든(늦게 접속한 클라이언트가 씬 이벤트 일부를 못 받는 경우 등)
@@ -23,10 +25,20 @@ public class LoadingScreenUI : MonoBehaviour
     // 없어야 한다.
     private const float SafetyTimeoutSeconds = 10f;
     private const float DotIntervalSeconds = 0.35f;
+    private const float FadeDuration = 0.2f;
+    private const float SpinnerDegreesPerSecond = 220f;
 
     private float shownAtTime = -1f;
     private float nextDotUpdateTime;
     private int dotCount;
+
+    // 예전엔 SetActive만 즉시 토글해서 로딩 화면이 뚝 끊기듯 나타나고 사라졌다 --
+    // CanvasGroup.alpha를 짧게 페이드시켜 다른 카드/배너들(UIPunchIn)과 톤을 맞춘다.
+    // targetAlpha와 별개로 fadingOut 동안에도 오브젝트는 계속 active 상태를 유지해야
+    // 페이드가 실제로 보이므로, 완전히 다 사라진 뒤에만 SetActive(false)로 끈다.
+    private bool fadingOut;
+    private float fadeStartTime;
+    private float fadeStartAlpha;
 
     // NetworkManager.Singleton은 Bootstrap 씬이 로드되는 즉시 존재하지만, 그 안의
     // SceneManager(NetworkSceneManager)는 서버/클라이언트가 실제로 시작된 뒤에야
@@ -79,6 +91,22 @@ public class LoadingScreenUI : MonoBehaviour
             dotCount = (dotCount + 1) % 4;
             if (messageText != null) messageText.text = "로딩 중" + new string('.', dotCount);
         }
+
+        if (spinner != null)
+        {
+            spinner.Rotate(0f, 0f, -SpinnerDegreesPerSecond * Time.unscaledDeltaTime);
+        }
+
+        if (overlayCanvasGroup != null)
+        {
+            float t = Mathf.Clamp01((Time.unscaledTime - fadeStartTime) / FadeDuration);
+            float target = fadingOut ? 0f : 1f;
+            overlayCanvasGroup.alpha = Mathf.Lerp(fadeStartAlpha, target, t);
+            if (fadingOut && t >= 1f)
+            {
+                overlayPanel.SetActive(false);
+            }
+        }
     }
 
     private void HandleSceneEvent(SceneEvent sceneEvent)
@@ -104,13 +132,21 @@ public class LoadingScreenUI : MonoBehaviour
     private void SetOverlayActive(bool active)
     {
         if (overlayPanel == null) return;
-        overlayPanel.SetActive(active);
         shownAtTime = active ? Time.unscaledTime : -1f;
+
+        float currentAlpha = overlayCanvasGroup != null ? overlayCanvasGroup.alpha : (overlayPanel.activeSelf ? 1f : 0f);
+        fadingOut = !active;
+        fadeStartTime = Time.unscaledTime;
+        fadeStartAlpha = currentAlpha;
+
         if (active)
         {
+            overlayPanel.SetActive(true);
             dotCount = 0;
             nextDotUpdateTime = Time.unscaledTime + DotIntervalSeconds;
             if (messageText != null) messageText.text = "로딩 중";
         }
+        // 꺼질 때는 여기서 곧바로 SetActive(false)하지 않는다 -- Update()가 알파를
+        // 0까지 페이드시킨 뒤에 꺼야 실제로 페이드아웃이 보인다.
     }
 }

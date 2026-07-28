@@ -20,6 +20,13 @@ public class LobbyUI : MonoBehaviour
     private int lastState = -1; // 0=카운트다운 중, 1=곧 시작, 2=대기 중
     private bool lastHasSelection;
 
+    // 카운트다운 숫자가 1초마다 바뀔 때 조용히 텍스트만 갈아끼우면 "똑딱거린다"는
+    // 느낌이 안 산다 -- ScoreboardUI의 갱신 펄스와 동일한 패턴으로, 매 초 살짝
+    // 튀어오르는 스케일 펄스를 얹는다.
+    private const float PulseDuration = 0.18f;
+    private const float PulseScale = 1.15f;
+    private float pulseStartTime = -1f;
+
     private void Awake()
     {
         primaryHex = ColorUtility.ToHtmlStringRGB(UITheme.ColorPrimary);
@@ -43,8 +50,15 @@ public class LobbyUI : MonoBehaviour
 
         if (connected == lastConnected && countdownWhole == lastCountdownWhole && state == lastState && hasSelection == lastHasSelection)
         {
+            ApplyPulse();
             return;
         }
+
+        // 접속 인원/상태가 바뀐 게 아니라 카운트다운 숫자만 매 초 줄어드는 경우에만
+        // "똑딱" 펄스를 건다 -- 상태 전환(대기->카운트다운 등)은 텍스트 자체가 완전히
+        // 바뀌므로 매초 펄스와는 다른 신호라 겹치면 오히려 산만하다.
+        bool onlyCountdownTicked = state == 0 && lastState == 0 && connected == lastConnected && hasSelection == lastHasSelection;
+
         lastConnected = connected;
         lastCountdownWhole = countdownWhole;
         lastState = state;
@@ -59,5 +73,17 @@ public class LobbyUI : MonoBehaviour
         statusText.text = hasSelection
             ? baseText + $"\n<color=#{iceHex}>다음 스테이지가 선택되었습니다</color>"
             : baseText;
+
+        if (onlyCountdownTicked) pulseStartTime = Time.unscaledTime;
+        ApplyPulse();
+    }
+
+    private void ApplyPulse()
+    {
+        if (pulseStartTime < 0f) return;
+        float t = Mathf.Clamp01((Time.unscaledTime - pulseStartTime) / PulseDuration);
+        float scale = Mathf.Lerp(PulseScale, 1f, t);
+        statusText.transform.localScale = Vector3.one * scale;
+        if (t >= 1f) pulseStartTime = -1f;
     }
 }

@@ -1418,12 +1418,29 @@ public static class GameFlowSceneSetup
         Image bg = overlayPanel.AddComponent<Image>();
         bg.sprite = NetworkSetupMenu.GetOrCreatePlaceholderSprite();
         bg.color = UITheme.ColorBgSecondary;
+        CanvasGroup overlayCanvasGroup = overlayPanel.AddComponent<CanvasGroup>();
+
+        // 회전하는 스피너 -- 지금까지는 "로딩 중..." 점 애니메이션 하나뿐이라 화면이
+        // 정적으로 멈춘 것처럼 보이기 쉬웠다. UI_ButtonPrimary와 같은 라운드 스프라이트
+        // 생성기를 재사용해 두꺼운 링 하나를 만들고, LoadingScreenUI가 매 프레임 돌린다.
+        GameObject spinnerObj = new GameObject("Spinner");
+        spinnerObj.transform.SetParent(overlayPanel.transform, false);
+        RectTransform spinnerRect = spinnerObj.AddComponent<RectTransform>();
+        spinnerRect.anchorMin = new Vector2(0.5f, 0.5f);
+        spinnerRect.anchorMax = new Vector2(0.5f, 0.5f);
+        spinnerRect.anchoredPosition = new Vector2(0f, -80f);
+        spinnerRect.sizeDelta = new Vector2(64f, 64f);
+        Image spinnerImage = spinnerObj.AddComponent<Image>();
+        spinnerImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_LoadingSpinner.png", UITheme.ColorPrimary, UITheme.ColorIce, 32f, 10f);
+        spinnerImage.type = Image.Type.Sliced;
 
         Text message = CreateLabel(overlayPanel.transform, "MessageLabel", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(500f, 100f),
             36, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold);
         message.text = "로딩 중";
 
         loadingScreen.overlayPanel = overlayPanel;
+        loadingScreen.overlayCanvasGroup = overlayCanvasGroup;
+        loadingScreen.spinner = spinnerRect;
         loadingScreen.messageText = message;
 
         overlayPanel.SetActive(false);
