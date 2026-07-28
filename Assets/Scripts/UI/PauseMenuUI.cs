@@ -19,6 +19,21 @@ public class PauseMenuUI : MonoBehaviour
     public Slider masterSlider;
     public Slider musicSlider;
     public Slider sfxSlider;
+    public Toggle fullscreenToggle;
+
+    private const string FullscreenPrefKey = "display_fullscreen";
+
+    // 거의 모든 상용 PC 게임이 창/전체화면 전환을 기본 제공하는데 이 설정 패널엔
+    // 음량 슬라이더뿐이었다 -- 저장된 값을 앱 시작 시 적용해서, 지난번에 창모드로
+    // 바꿨다면 다음 실행에도 그대로 유지된다. 헤드리스 데디케이티드 서버는 모니터가
+    // 없으므로 건드리지 않는다(AudioManager가 UNITY_SERVER를 다루는 것과 동일한 이유).
+    private void Awake()
+    {
+#if !UNITY_SERVER
+        bool fullscreen = PlayerPrefs.GetInt(FullscreenPrefKey, 1) == 1;
+        Screen.fullScreenMode = fullscreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed;
+#endif
+    }
 
     // 일시정지 카드 위에는 한 번에 서브패널 하나만 겹쳐 뜬다 -- ESC가 "가장 위에
     // 열린 것 하나만" 닫도록, 서브패널마다 별도 bool을 두는 대신 단일 상태로
@@ -86,6 +101,10 @@ public class PauseMenuUI : MonoBehaviour
             if (musicSlider != null) musicSlider.SetValueWithoutNotify(AudioManager.Instance.MusicVolume);
             if (sfxSlider != null) sfxSlider.SetValueWithoutNotify(AudioManager.Instance.SfxVolume);
         }
+        if (fullscreenToggle != null)
+        {
+            fullscreenToggle.SetIsOnWithoutNotify(Screen.fullScreenMode != FullScreenMode.Windowed);
+        }
     }
 
     // 접속 화면의 "설정" 버튼용 진입점 -- settingsPanel이 pausePanel의 자식이라
@@ -108,6 +127,15 @@ public class PauseMenuUI : MonoBehaviour
     public void OnMasterVolumeChanged(float value) => AudioManager.Instance?.SetMasterVolume(value);
     public void OnMusicVolumeChanged(float value) => AudioManager.Instance?.SetMusicVolume(value);
     public void OnSfxVolumeChanged(float value) => AudioManager.Instance?.SetSfxVolume(value);
+
+    public void OnFullscreenToggled(bool isFullscreen)
+    {
+#if !UNITY_SERVER
+        Screen.fullScreenMode = isFullscreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed;
+        PlayerPrefs.SetInt(FullscreenPrefKey, isFullscreen ? 1 : 0);
+        PlayerPrefs.Save();
+#endif
+    }
 
     // 협동 게임이라 다른 플레이어가 아직 하고 있는 도중에 실수로 ESC -> 종료를
     // 연달아 눌러 세션을 끊어버리는 사고가 나기 쉽다 -- 바로 종료하지 않고 확인

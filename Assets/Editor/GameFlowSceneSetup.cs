@@ -1297,6 +1297,41 @@ public static class GameFlowSceneSetup
         return slider;
     }
 
+    // 체크박스형 토글 -- 배경(테두리 있는 흰 사각) 위에 켜졌을 때만 보이는 초록
+    // 사각을 겹쳐 그린다. Slider와 같은 조립 패턴(코드로 표준 Unity UI 계층을 구성)이다.
+    private static Toggle CreateToggle(Transform parent, string name, Vector2 anchoredPosition, bool initialValue)
+    {
+        GameObject toggleObj = new GameObject(name);
+        toggleObj.transform.SetParent(parent, false);
+        RectTransform rect = toggleObj.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.sizeDelta = new Vector2(44f, 44f);
+        rect.anchoredPosition = anchoredPosition;
+
+        Image bg = toggleObj.AddComponent<Image>();
+        bg.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ToggleBg.png", UITheme.ColorWhite, UITheme.ColorFg, 10f, 3f);
+        bg.type = Image.Type.Sliced;
+
+        GameObject checkObj = new GameObject("Checkmark");
+        checkObj.transform.SetParent(toggleObj.transform, false);
+        RectTransform checkRect = checkObj.AddComponent<RectTransform>();
+        checkRect.anchorMin = new Vector2(0.5f, 0.5f);
+        checkRect.anchorMax = new Vector2(0.5f, 0.5f);
+        checkRect.sizeDelta = new Vector2(26f, 26f);
+        Image checkImage = checkObj.AddComponent<Image>();
+        checkImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ToggleCheck.png", UITheme.ColorPrimary, UITheme.ColorPrimary, 6f, 0f);
+        checkImage.type = Image.Type.Sliced;
+
+        Toggle toggle = toggleObj.AddComponent<Toggle>();
+        toggle.targetGraphic = bg;
+        toggle.graphic = checkImage;
+        toggle.SetIsOnWithoutNotify(initialValue);
+        toggleObj.AddComponent<UIButtonPunch>();
+
+        return toggle;
+    }
+
     // ESC로 여는 일시정지 메뉴 + 설정 서브패널. Bootstrap 씬에 배치되어 Lobby/Stage
     // 전환과 무관하게 항상 존재한다. 온라인 협동 게임이라 Time.timeScale은 건드리지
     // 않는다 (PauseMenuUI.cs 헤더 주석 참고).
@@ -1375,12 +1410,19 @@ public static class GameFlowSceneSetup
             24, UITheme.ColorFg, TextAnchor.MiddleLeft, bodyMediumFont).text = "효과음";
         Slider sfxSlider = CreateSlider(settingsPanel.transform, "SfxSlider", new Vector2(100f, -50f), new Vector2(220f, 24f), 0.8f);
 
-        Button backButton = CreateMenuButton(settingsPanel.transform, "BackButton", new Vector2(0f, -170f), "뒤로");
+        // 볼륨 슬라이더뿐이던 설정 패널에 창/전체화면 전환을 추가한다 -- 대부분의
+        // 상용 PC 게임이 기본으로 제공하는 항목인데 지금까지 빠져 있었다.
+        CreateLabel(settingsPanel.transform, "FullscreenLabel", new Vector2(0.5f, 0.5f), new Vector2(-140f, -120f), new Vector2(200f, 36f),
+            24, UITheme.ColorFg, TextAnchor.MiddleLeft, bodyMediumFont).text = "전체화면";
+        Toggle fullscreenToggle = CreateToggle(settingsPanel.transform, "FullscreenToggle", new Vector2(100f, -120f), Screen.fullScreenMode != FullScreenMode.Windowed);
+
+        Button backButton = CreateMenuButton(settingsPanel.transform, "BackButton", new Vector2(0f, -190f), "뒤로");
 
         UnityEditor.Events.UnityEventTools.AddPersistentListener(backButton.onClick, pauseMenu.CloseSettings);
         UnityEditor.Events.UnityEventTools.AddPersistentListener(masterSlider.onValueChanged, pauseMenu.OnMasterVolumeChanged);
         UnityEditor.Events.UnityEventTools.AddPersistentListener(musicSlider.onValueChanged, pauseMenu.OnMusicVolumeChanged);
         UnityEditor.Events.UnityEventTools.AddPersistentListener(sfxSlider.onValueChanged, pauseMenu.OnSfxVolumeChanged);
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(fullscreenToggle.onValueChanged, pauseMenu.OnFullscreenToggled);
 
         // 종료 확인 서브패널 -- 설정 패널과 똑같은 크기(480x460)로, 뒤에 깔린
         // pausePanel의 "일시정지" 제목/버튼까지 완전히 덮어야 한다. 더 작게 잡았다가
@@ -1413,6 +1455,7 @@ public static class GameFlowSceneSetup
         pauseMenu.masterSlider = masterSlider;
         pauseMenu.musicSlider = musicSlider;
         pauseMenu.sfxSlider = sfxSlider;
+        pauseMenu.fullscreenToggle = fullscreenToggle;
 
         pausePanel.SetActive(false);
         return pauseMenu;
