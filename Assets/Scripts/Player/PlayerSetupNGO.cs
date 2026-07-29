@@ -10,6 +10,25 @@ public class PlayerSetupNGO : NetworkBehaviour
     // 모두 검증됨) 별도 정리 로직 없이 항상 정확하다.
     public static readonly List<GameObject> ActivePlayers = new List<GameObject>();
 
+    // 랭크 기반 역할 배정(BotController의 문지기/열쇠 릴레이/쌍둥이 문지기 등)은
+    // 원래 OwnerClientId 오름차순으로 계산했다. 그런데 서버가 실제 접속 없이 직접
+    // 스폰하는 "채움 봇"(인원 부족 시 자동 추가)은 전부 서버 소유라 OwnerClientId가
+    // 서로 동일해서(모두 서버 자신의 ID) 그 기준으로는 순위를 구분할 수 없다.
+    // NetworkObjectId는 스폰되는 모든 NetworkObject마다 고유하게 배정되므로(실제
+    // 클라이언트든 채움 봇이든 상관없이), 이걸 랭크 기준으로 쓰면 두 종류가 섞여도
+    // 항상 안정적으로 구분된다. BotController/PlayerLabelNGO가 공유하는 유일한 랭크
+    // 산출 지점이라, 여기서 한 번만 정의한다.
+    public static int GetRank(NetworkObject self)
+    {
+        int rank = 0;
+        foreach (GameObject candidate in ActivePlayers)
+        {
+            NetworkObject candidateNo = candidate.GetComponent<NetworkObject>();
+            if (candidateNo != null && candidateNo.NetworkObjectId < self.NetworkObjectId) rank++;
+        }
+        return rank;
+    }
+
     public override void OnNetworkSpawn()
     {
         ActivePlayers.Add(gameObject);
@@ -43,7 +62,10 @@ public class PlayerSetupNGO : NetworkBehaviour
 
         if (spawnPoints.Length > 0)
         {
-            int index = (int)(OwnerClientId % (ulong)spawnPoints.Length);
+            // OwnerClientId 대신 NetworkObjectId로 스폰 지점을 고른다 -- 서버가 직접
+            // 스폰하는 채움 봇은 전부 OwnerClientId가 서버 자신으로 동일해서, 그
+            // 기준으로는 채움 봇 여러 명이 전부 같은 스폰 지점에 겹쳐 스폰된다.
+            int index = (int)(NetworkObjectId % (ulong)spawnPoints.Length);
             transform.position = spawnPoints[index].transform.position;
         }
         else

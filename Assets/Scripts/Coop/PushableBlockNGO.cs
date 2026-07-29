@@ -61,7 +61,11 @@ public class PushableBlockNGO : NetworkBehaviour
         isInPlace.OnValueChanged += OnArrivedChanged;
 
         if (!IsServer) return;
-        int connected = NetworkManager.Singleton.ConnectedClientsIds.Count;
+        // ConnectedClientsIds 대신 PlayerSetupNGO.ActivePlayers를 쓴다 -- 인원 부족 시
+        // 서버가 직접 스폰하는 채움 봇은 실제 네트워크 접속이 아니라 ConnectedClientsIds에
+        // 안 잡히므로, 그 기준으로는 채움 봇 인원만큼 요구치가 부풀려져(실제로는 이미
+        // 채워진 인원인데도) 게이팅이 영영 안 풀릴 수 있다.
+        int connected = PlayerSetupNGO.ActivePlayers.Count;
         requiredPushers = Mathf.Max(1, Mathf.CeilToInt(connected * 0.6f));
     }
 

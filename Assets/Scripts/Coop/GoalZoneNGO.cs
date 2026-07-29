@@ -40,7 +40,11 @@ public class GoalZoneNGO : NetworkBehaviour
         // 부풀려진다. PushableBlockNGO/SeesawPlatformNGO가 이미 쓰는 것과 동일한 방어.
         playersInZone.RemoveWhere(c => c == null);
 
-        int connectedPlayers = NetworkManager.Singleton.ConnectedClientsIds.Count;
+        // ConnectedClientsIds 대신 PlayerSetupNGO.ActivePlayers를 쓴다 -- 인원 부족 시
+        // 서버가 직접 스폰하는 채움 봇은 실제 네트워크 접속이 아니라 ConnectedClientsIds에
+        // 안 잡히므로, 그 기준으로는 채움 봇이 도달해도 카운트되지 않아 "전원 동시 도달"
+        // 조건이 채움 봇 인원만큼 영영 못 채워질 수 있다.
+        int connectedPlayers = PlayerSetupNGO.ActivePlayers.Count;
         if (connectedPlayers > 0 && playersInZone.Count >= connectedPlayers)
         {
             Debug.Log($"[GoalZone] {gameObject.name} 스테이지 클리어 -- 전원({connectedPlayers}명) 도달");

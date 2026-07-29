@@ -31,6 +31,14 @@ public class BotController : NetworkBehaviour
     public float HorizontalInput { get; private set; }
     public bool JumpRequested { get; private set; }
 
+    // 로비 인원 부족 시 서버가 직접 스폰하는 "채움 봇"은 -bot 인자로 실행된 별도
+    // 프로세스가 아니라, 서버 자신이 소유한 Player 오브젝트다(BotProcess.IsBot은
+    // 이 프로세스가 -bot으로 켜졌는지만 보므로 항상 false). GameFlowManager가
+    // 스폰 직후(NetworkObject.Spawn() 호출 전) MarkAsFillerBot()을 호출해 이
+    // 오브젝트만 예외적으로 활성화한다.
+    private bool isFillerBot;
+    public void MarkAsFillerBot() => isFillerBot = true;
+
     // 시소 절반 폭(스프라이트 6유닛 → ±3). 시소 중심 x를 기준으로 좌/우 절반과
     // "다 건넜다" 판정 경계를 계산하는 데 쓴다.
     private const float SeesawHalf = 3f;
@@ -121,7 +129,7 @@ public class BotController : NetworkBehaviour
             return;
         }
 
-        enabled = BotProcess.IsBot;
+        enabled = BotProcess.IsBot || isFillerBot;
         if (!enabled) return;
 
         spawnPosition = transform.position;
@@ -290,6 +298,14 @@ public class BotController : NetworkBehaviour
     // 골존이 맵 전체를 덮도록 설계돼 있어(현 지오메트리) rank0가 버튼을 떠나지 않아도
     // 전원이 골 안에 들어와 클리어된다 -- "한 명이 열고 나머지가 통과"라는 기믹을
     // 그대로 보여주면서 100% 재현 가능하다.
+    //
+    // rank0은 나머지 전원이 이미 문을 건넜으면 버튼을 놓고 합류한다 -- Stage 3의
+    // 열쇠 운반자(UpdateKeyCarrier, AllOthersAcross)가 이미 쓰는 "필요한 동안만
+    // 유지하고, 다 건넜으면 나도 합류"와 정확히 같은 패턴을 재사용한다. 실제 사람
+    // 이라면 팀원이 다 지나간 뒤에도 계속 버튼을 누르고 서 있지 않는다. 이 판단은
+    // 매 프레임 다시 평가되는 조건이라(일회성 래치가 아님) 안전하다 -- 스테이지
+    // 도중 새 플레이어가 접속해 아직 못 건넜다면, 바로 다음 프레임에
+    // AllOthersAcross가 다시 false가 되어 rank0이 곧장 버튼으로 되돌아간다.
     private void UpdateGatekeeper()
     {
         // Stage 5(쌍둥이 문지기)는 같은 컴포넌트 조합(coopDoor+goal)을 쓰지만 문이
@@ -300,16 +316,21 @@ public class BotController : NetworkBehaviour
             return;
         }
 
+        float targetX = coopDoor.transform.position.x + 2f;
         int rank = GetMyRank();
 
         if (rank == 0 && coopButton != null)
         {
+            if (AllOthersAcross(targetX))
+            {
+                MoveToward(targetX);
+                return;
+            }
             MoveToward(coopButton.transform.position.x);
             return;
         }
 
         // 나머지: 문 너머로 이동(문이 닫혀 있으면 앞에서 대기하다 열리면 통과).
-        float targetX = coopDoor.transform.position.x + 2f;
         MoveToward(targetX);
     }
 
@@ -650,16 +671,11 @@ public class BotController : NetworkBehaviour
 
     // 접속한 Player 오브젝트 중 내 OwnerClientId보다 작은 것의 수 = 오름차순 정렬 시 내 순번.
     // 모든 클라이언트가 동일한 OwnerClientId 집합을 보므로 서버 방송 없이 같은 결론에 도달한다.
-    private int GetMyRank()
-    {
-        int rank = 0;
-        foreach (GameObject p in players)
-        {
-            NetworkObject no = p.GetComponent<NetworkObject>();
-            if (no != null && no.OwnerClientId < OwnerClientId) rank++;
-        }
-        return rank;
-    }
+    // PlayerSetupNGO.GetRank()로 위임한다 -- OwnerClientId 기준이던 예전 랭크 계산은
+    // 서버가 직접 스폰하는 채움 봇(전부 OwnerClientId가 서버 자신으로 동일)을 서로
+    // 구분하지 못했다. NetworkObjectId 기준으로 바뀐 이유는 PlayerSetupNGO.GetRank()
+    // 주석 참고.
+    private int GetMyRank() => PlayerSetupNGO.GetRank(NetworkObject);
 
     // GetMyRank()의 역방향 -- "이 랭크를 가진 Player 오브젝트"를 찾는다. 쌍둥이
     // 문지기의 거리 기반 배정처럼, 나 자신이 아닌 다른 특정 랭크의 실제 위치가
@@ -671,14 +687,7 @@ public class BotController : NetworkBehaviour
             NetworkObject candidateNo = candidate.GetComponent<NetworkObject>();
             if (candidateNo == null) continue;
 
-            int candidateRank = 0;
-            foreach (GameObject other in players)
-            {
-                NetworkObject otherNo = other.GetComponent<NetworkObject>();
-                if (otherNo != null && otherNo.OwnerClientId < candidateNo.OwnerClientId) candidateRank++;
-            }
-
-            if (candidateRank == targetRank) return candidate;
+            if (PlayerSetupNGO.GetRank(candidateNo) == targetRank) return candidate;
         }
         return null;
     }
