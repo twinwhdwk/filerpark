@@ -109,8 +109,18 @@ public static class FullRotationBotVerify
         // 쓰는 것과 같은 방식으로 이 도구가 직접 "준비 버튼 클릭"을 대신 호출한다 --
         // 실제 배포(StartServer(), 호스트 플레이어 없음)에는 없는, 이 로컬 테스트
         // 방식만의 문제다.
-        if (SessionState.GetBool(KeyHostStarted, false) && !SessionState.GetBool(KeyHostReadySent, false)
-            && GameFlowManager.Instance != null && GameFlowManager.Instance.phase.Value == GameFlowManager.GamePhase.Lobby)
+        // GameFlowManager는 스테이지가 시작될 때마다 readyClientIds를 초기화하므로
+        // (매 라운드 다시 준비해야 함), 호스트도 로비에 돌아올 때마다 다시 한 번
+        // 준비를 보내야 한다 -- 한 번만 보내면 Stage1 클리어 후 두 번째 로비부터는
+        // 봇 4개가 전부 재준비해도(BotController의 동일한 수정 참고) 호스트 몫 1명이
+        // 빠져 영원히 대기하게 된다(실측: 4/5에서 정체). phase가 Lobby가 아니게
+        // 되면 플래그를 리셋해 다음 로비 진입 때 다시 보내도록 한다.
+        bool inLobbyNow = GameFlowManager.Instance != null && GameFlowManager.Instance.phase.Value == GameFlowManager.GamePhase.Lobby;
+        if (!inLobbyNow)
+        {
+            SessionState.SetBool(KeyHostReadySent, false);
+        }
+        else if (SessionState.GetBool(KeyHostStarted, false) && !SessionState.GetBool(KeyHostReadySent, false))
         {
             GameFlowManager.Instance.RequestReadyServerRpc(true);
             SessionState.SetBool(KeyHostReadySent, true);
