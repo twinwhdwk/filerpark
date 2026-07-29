@@ -43,6 +43,8 @@ public class BotController : NetworkBehaviour
     // "다 건넜다" 판정 경계를 계산하는 데 쓴다.
     private const float SeesawHalf = 3f;
     private const float AcrossMargin = 0.5f;
+    // 스테이지 2: 다리(블록) 입구 앞에서 이미 건너는 동료와 이만큼 거리를 두고 대기한다.
+    private const float BridgeQueueGap = 2f;
     // 스테이지 4: 팀의 최소 진행도보다 이만큼 이상 앞서면 낙오자를 기다린다.
     private const float AllowedLead = 2.5f;
 
@@ -56,6 +58,7 @@ public class BotController : NetworkBehaviour
     private GoalZoneNGO goal;
     private BoxCollider2D goalCollider;
     private PushableBlockNGO block;
+    private BoxCollider2D blockSolidCollider;
     private CarryableKeyNGO key;
     private KeyDoorNGO keyDoor;
     private SeesawPlatformNGO seesaw;
@@ -281,6 +284,10 @@ public class BotController : NetworkBehaviour
         goal = Object.FindAnyObjectByType<GoalZoneNGO>();
         goalCollider = goal != null ? goal.GetComponent<BoxCollider2D>() : null;
         block = Object.FindAnyObjectByType<PushableBlockNGO>();
+        // block에는 콜라이더가 둘 있다(실체 + 미는 트리거) -- GetComponent는 생성 순서상
+        // 먼저 붙은 실체 콜라이더(오프셋 없음, 다리 폭 그대로)를 돌려준다. 다리 폭 계산에
+        // 필요한 건 이쪽이지 넓은 대기용 트리거가 아니다.
+        blockSolidCollider = block != null ? block.GetComponent<BoxCollider2D>() : null;
         key = Object.FindAnyObjectByType<CarryableKeyNGO>();
         keyDoor = Object.FindAnyObjectByType<KeyDoorNGO>();
         seesaw = Object.FindAnyObjectByType<SeesawPlatformNGO>();
@@ -416,6 +423,34 @@ public class BotController : NetworkBehaviour
             // 블록 위에서도 점프가 서버 검증(groundCheck)을 통과한다 -- 예전엔 블록이
             // Ground가 아니라 그 위에서의 점프 요청이 서버에서 조용히 거부돼, 이 이음매
             // 끼임에 점프가 무력했던 것이 5봇 테스트에서 영구 정체를 만든 근본 원인이었다.
+            //
+            // 다리에 아직 안 올라섰다면, 입구 근처에 이미 건너는 중인 동료가 있는지
+            // 먼저 확인한다 -- CreateStage02Scene 주석에 남아 있듯 5봇 테스트에서 좁은
+            // 다리를 여럿이 동시에 건너다 서로 부대껴 밀려나 구덩이로 떨어진 실측
+            // 사례가 있다(안전망은 그 낙사가 영구 정체로 이어지지 않게만 막을 뿐,
+            // 애초에 부딪히는 것 자체는 막지 않는다). 실제 사람이라면 좁은 외나무다리
+            // 앞에서 동료가 아직 건너는 중이면 한 명씩 순서를 두지, 동시에 밀고
+            // 들어가지 않는다 -- 대기 지점(MoveToward로 도착하면 입력이 0이 되는 지점)에
+            // 서면 범용 회복 레이어도 자동으로 꺼지므로(입력 0 = 회복 대상 아님) 별도
+            // opt-out 없이 안전하다.
+            float blockHalfWidth = BlockHalfWidth();
+            float bridgeLeft = block.transform.position.x - blockHalfWidth;
+            float myX = transform.position.x;
+
+            if (myX < bridgeLeft)
+            {
+                foreach (GameObject p in players)
+                {
+                    if (p == gameObject) continue;
+                    float px = p.transform.position.x;
+                    if (px > myX && px < bridgeLeft + BridgeQueueGap)
+                    {
+                        MoveToward(bridgeLeft - 0.3f);
+                        return;
+                    }
+                }
+            }
+
             MoveTowardGoal();
             return;
         }
@@ -645,6 +680,14 @@ public class BotController : NetworkBehaviour
     {
         if (goal == null || goalCollider == null) return 3f;
         return Mathf.Abs(goalCollider.size.x * goal.transform.lossyScale.x) * 0.5f;
+    }
+
+    // 블록(다리)의 월드 반폭 -- 실체 콜라이더에서 읽어서 씬 쪽 치수(현재 5유닛)가
+    // 바뀌어도 따로 상수를 맞출 필요가 없게 한다.
+    private float BlockHalfWidth()
+    {
+        if (block == null || blockSolidCollider == null) return 2.5f;
+        return Mathf.Abs(blockSolidCollider.size.x * block.transform.lossyScale.x) * 0.5f;
     }
 
     // 이미 골존 안(가로 기준)에 들어와 있는가. 들어와 있으면 위치는 충분히 좋으므로
