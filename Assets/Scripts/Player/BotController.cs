@@ -459,15 +459,25 @@ public class BotController : NetworkBehaviour
         if (doorOpen && doorOpenSince < 0f) doorOpenSince = Time.time;
         if (!doorOpen) doorOpenSince = -1f;
 
-        // 문이 열린 걸 알아채기까지도 사람마다 조금씩 다른 반응 지연(reactionDelay)을
-        // 준다 -- 어차피 스폰이 흩어져 있어 자연 시차가 나던 걸, 문이 열리는 순간에도
-        // 전원이 프레임 단위로 똑같이 반응하지 않게 한다. 시소 균형 규칙은 위치 기준
-        // 이라 이 지연 자체가 순서에 영향을 줄 뿐 안정성은 그대로다.
-        if (!doorOpen || Time.time - doorOpenSince < reactionDelay)
+        // 문이 닫혀 있는 동안엔 스폰 자리에 얼어붙어 있는 대신 문 앞까지 걸어가 줄을
+        // 선다 -- 실제 사람이라면 잠긴 문이 보이는데 출발선에 가만히 서서 기다리지
+        // 않는다. KeyDoor1은 닫혀 있을 때 트리거가 아닌 실체 콜라이더라(문 자체가
+        // 벽 역할) 문이 열리기 전에 목표 좌표가 문 너머라도 물리적으로 문 앞에서
+        // 멈추므로, 이 이동은 조기 통과 위험이 전혀 없다 -- 실제로 열렸을 때만
+        // 통과할 수 있다는 판정은 여전히 KeyDoorNGO 콜라이더 자체가 보장한다.
+        float doorX = keyDoor != null ? keyDoor.transform.position.x : 7f;
+        if (!doorOpen)
         {
-            // 문이 열리기 전엔 제자리 대기(운반자가 열쇠를 문으로 가져올 때까지).
-            // 스폰이 −6~6로 흩어져 있어, 대기 중 흩어진 채로 있다가 문이 열리면
-            // 자연히 시차를 두고 시소에 도착 -> 균형 규칙이 순차 횡단을 만든다.
+            MoveToward(doorX - 0.6f);
+            return;
+        }
+
+        // 문이 열린 걸 알아채기까지도 사람마다 조금씩 다른 반응 지연(reactionDelay)을
+        // 준다 -- 문 앞에 이미 줄 서 있더라도, 열리는 순간 전원이 프레임 단위로
+        // 똑같이 반응하지 않게 한다. 시소 균형 규칙은 위치 기준이라 이 지연 자체가
+        // 순서에 영향을 줄 뿐 안정성은 그대로다.
+        if (Time.time - doorOpenSince < reactionDelay)
+        {
             HorizontalInput = 0f;
             return;
         }
