@@ -124,6 +124,13 @@ public class BotController : NetworkBehaviour
     // non-null(스테이지 로드됨)로 바뀌는 프레임만 "새 스테이지 진입"으로 본다.
     private float stageEnteredAt = -1f;
 
+    // 로비 준비 게이트는 스테이지가 시작될 때마다 readyClientIds를 초기화한다(매
+    // 라운드 다시 준비해야 함) -- 그런데 OnNetworkSpawn에서 딱 한 번만 준비를
+    // 보내면, 첫 스테이지 이후 다음 로비 사이클부터는 아무도 다시 준비를 안 보내
+    // 영원히 대기하게 된다(FullRotationBotVerify로 Stage1 클리어 후 재확인). 스테이지에
+    // 진입할 때 false로 리셋해두고, 로비로 돌아왔을 때(goal==null) 다시 한 번 보낸다.
+    private bool readySentForCurrentLobby;
+
     public override void OnNetworkSpawn()
     {
         if (!IsOwner)
@@ -143,6 +150,7 @@ public class BotController : NetworkBehaviour
         // 클릭을 NetworkBootstrapper가 봇 대신 즉시 ConnectToServer()로 건너뛰는 것과
         // 같은 이유의 같은 패턴.
         GameFlowManager.Instance?.RequestReadyServerRpc(true);
+        readySentForCurrentLobby = true;
 
         spawnPosition = transform.position;
         progressAnchorX = transform.position.x;
@@ -231,6 +239,9 @@ public class BotController : NetworkBehaviour
         if (goalWasNull && goal != null)
         {
             stageEnteredAt = Time.time;
+            // 다음에 이 스테이지를 클리어하고 로비로 돌아오면 새 준비 게이트를
+            // 다시 통과해야 하므로 리셋해둔다.
+            readySentForCurrentLobby = false;
             // 봇이 씬에 있는 기믹만 보고 스스로 스테이지를 판별하는 구조라(클래스
             // 상단 주석 참고), "이 봇이 지금 뭘 정답으로 골랐는지"가 겉으로는 전혀
             // 안 보인다 -- 의도한 스테이지가 아닌 다른 걸로 오판했는지 여부를 로그
@@ -245,6 +256,19 @@ public class BotController : NetworkBehaviour
             Debug.Log($"[Bot] clientId={OwnerClientId} rank={GetMyRank()} 스테이지 감지: {detected}");
         }
         if (stageEnteredAt < 0f) stageEnteredAt = Time.time;
+
+        // goal==null만으로 판단하지 않고 phase.Value == Lobby까지 확인한다 -- 스테이지
+        // 사이 씬 전환 공백(직전 스테이지는 언로드됐지만 Lobby가 아직 로드 완료 전)에도
+        // goal은 null이라, phase 확인 없이 보내면 서버가 아직 Lobby가 아니라는 이유로
+        // RequestReadyServerRpc를 조용히 무시하는데도 이 플래그는 "보냈다"로 표시돼
+        // 그 사이클 내내 다시 안 보내는 경합이 생긴다.
+        if (goal == null && !readySentForCurrentLobby
+            && GameFlowManager.Instance != null
+            && GameFlowManager.Instance.phase.Value == GameFlowManager.GamePhase.Lobby)
+        {
+            GameFlowManager.Instance.RequestReadyServerRpc(true);
+            readySentForCurrentLobby = true;
+        }
 
         players = PlayerSetupNGO.ActivePlayers;
         recoverySuppressed = false;
