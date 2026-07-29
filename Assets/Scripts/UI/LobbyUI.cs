@@ -57,9 +57,11 @@ public class LobbyUI : MonoBehaviour
 
     private void UpdateReadyButtonLabel()
     {
+        // 버튼 폭(기본 320px)에 비해 너무 긴 라벨은 라운드 버튼 스프라이트 밖으로
+        // 넘치거나 줄바꿈되어 지저분해 보인다 -- 다른 버튼들과 비슷한 길이로 짧게 유지.
         if (readyButtonLabel != null)
         {
-            readyButtonLabel.text = localReady ? "준비 완료 (취소하려면 클릭)" : "시작 준비";
+            readyButtonLabel.text = localReady ? "준비 취소" : "시작 준비";
         }
     }
 
@@ -96,11 +98,13 @@ public class LobbyUI : MonoBehaviour
         lastState = state;
         lastHasSelection = hasSelection;
 
+        // 예전엔 한 줄에 다 욱여넣어서(특히 대기 상태 설명) 고정 크기 상자 밖으로
+        // 넘치거나 잘렸다 -- 각 상태를 두 줄 이내의 짧은 문장으로 쪼갠다.
         string baseText = state == 0
-            ? $"준비 완료 <color=#{primaryHex}><b>{ready}/{connected}</b></color>명 -- 인원이 부족해 <color=#{iceHex}><size=56><b>{countdownWhole}</b></size></color>초 후 봇이 자동으로 참가합니다"
+            ? $"준비 완료 <color=#{primaryHex}><b>{ready}/{connected}</b></color>명\n인원 부족 -- <color=#{iceHex}><size=52><b>{countdownWhole}</b></size></color>초 후 봇 참가"
             : state == 1
-                ? $"전원 준비 완료! 곧 시작합니다..."
-                : $"준비 완료 <color=#{primaryHex}><b>{ready}/{connected}</b></color>명\n모두 [시작 준비]를 누르면 시작됩니다 (스테이지를 깨려면 최소 {required}명 필요, 부족하면 봇이 채워줍니다)";
+                ? "전원 준비 완료!\n곧 시작합니다..."
+                : $"준비 완료 <color=#{primaryHex}><b>{ready}/{connected}</b></color>명\n[시작 준비]를 누르면 시작 (최소 {required}명)";
 
         statusText.text = hasSelection
             ? baseText + $"\n<color=#{iceHex}>다음 스테이지가 선택되었습니다</color>"

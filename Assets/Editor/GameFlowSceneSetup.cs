@@ -208,6 +208,11 @@ public static class GameFlowSceneSetup
             new Vector2(0.5f, 1f), new Vector2(0f, -200f), new Vector2(1100f, 180f),
             40, UITheme.ColorFg, TextAnchor.MiddleCenter, bodyMediumFont);
         statusText.supportRichText = true;
+        // 기본 verticalOverflow(Truncate)는 상자 높이를 넘는 줄을 그냥 조용히 잘라버린다 --
+        // 준비 인원 문구가 두 줄을 넘나드는 상태 전환 문구라 실측으로 잘림이 발생했다.
+        // scoreText와 동일하게 Overflow로 바꿔, 넘치면 그냥 상자 밖으로 더 그려지게(잘리지
+        // 않게) 한다 -- 위아래 여백이 넉넉해 살짝 넘쳐도 다른 UI와 겹치지 않는다.
+        statusText.verticalOverflow = VerticalWrapMode.Overflow;
         LobbyUI lobbyUI = canvasObj.AddComponent<LobbyUI>();
         lobbyUI.statusText = statusText;
 
