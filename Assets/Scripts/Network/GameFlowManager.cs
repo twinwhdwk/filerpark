@@ -396,7 +396,7 @@ public class GameFlowManager : NetworkBehaviour
 
         currentStageIndex.Value = nextIndex;
         phase.Value = GamePhase.InStage;
-        countdownActive = false;
+        fillWaitActive = false;
         lobbyCountdownRemaining.Value = 0f;
 
         string stageName = stageSceneNames[nextIndex];
