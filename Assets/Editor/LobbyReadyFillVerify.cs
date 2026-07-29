@@ -19,12 +19,15 @@ public static class LobbyReadyFillVerify
 {
     private const string BootstrapScenePath = "Assets/Scenes/Bootstrap.unity";
     private const float MaxWaitSeconds = 20f;
+    private const float SettleSeconds = 3f;
 
     private const string KeyActive = "LobbyReadyFillVerify.Active";
     private const string KeyHostStarted = "LobbyReadyFillVerify.HostStarted";
     private const string KeyReadySent = "LobbyReadyFillVerify.ReadySent";
     private const string KeyStartTime = "LobbyReadyFillVerify.StartTime";
     private const string KeyLastLoggedPhase = "LobbyReadyFillVerify.LastLoggedPhase";
+    private const string KeyPassDetectedAt = "LobbyReadyFillVerify.PassDetectedAt";
+    private const string KeyPassResult = "LobbyReadyFillVerify.PassResult";
 
     [MenuItem("Tools/Coop Setup/Debug: Lobby Ready+Fill Verify")]
     public static void Run()
@@ -42,6 +45,7 @@ public static class LobbyReadyFillVerify
         SessionState.SetBool(KeyReadySent, false);
         SessionState.EraseFloat(KeyStartTime);
         SessionState.EraseString(KeyLastLoggedPhase);
+        SessionState.EraseFloat(KeyPassDetectedAt);
         EditorApplication.isPlaying = true;
     }
 
@@ -112,14 +116,28 @@ public static class LobbyReadyFillVerify
 
             if (GameFlowManager.Instance != null && GameFlowManager.Instance.phase.Value == GameFlowManager.GamePhase.InStage)
             {
-                int activePlayers = PlayerSetupNGO.ActivePlayers.Count;
-                int required = GameFlowManager.Instance.requiredHeadcountToStart;
-                bool pass = activePlayers >= required;
-                Debug.Log(pass
-                    ? $"[LobbyFillVerify] PASS -- 스테이지 시작됨, ActivePlayers={activePlayers} (필요 {required}명) -- 채움 봇이 정상적으로 투입되었습니다."
-                    : $"[LobbyFillVerify] FAIL -- 스테이지는 시작됐지만 ActivePlayers={activePlayers} < 필요 {required}명 -- 채움 봇 투입이 실패했습니다.");
-                Finish("스테이지 시작 확인", pass);
-                return;
+                // phase는 StartNextStage()에서 씬 전환 시퀀스보다 먼저 동기적으로 바뀐다 --
+                // 여기서 곧바로 EditorApplication.Exit()하면 아직 진행 중인 Lobby Unload
+                // 비동기 작업 도중에 프로세스가 죽어, NGO의 OnSceneUnloaded 콜백이 이미
+                // 정리된 상태를 참조하다 ArgumentOutOfRangeException을 던진다(실제 게임
+                // 버그 아님, 이 테스트 도구가 너무 성급하게 종료해서 생기는 부작용). 판정
+                // 자체는 이 프레임에 확정하고, 실제 종료만 SettleSeconds만큼 늦춘다.
+                if (SessionState.GetFloat(KeyPassDetectedAt, -1f) < 0f)
+                {
+                    int activePlayers = PlayerSetupNGO.ActivePlayers.Count;
+                    int required = GameFlowManager.Instance.requiredHeadcountToStart;
+                    bool pass = activePlayers >= required;
+                    SessionState.SetBool(KeyPassResult, pass);
+                    SessionState.SetFloat(KeyPassDetectedAt, (float)EditorApplication.timeSinceStartup);
+                    Debug.Log(pass
+                        ? $"[LobbyFillVerify] PASS -- 스테이지 시작됨, ActivePlayers={activePlayers} (필요 {required}명) -- 채움 봇이 정상적으로 투입되었습니다."
+                        : $"[LobbyFillVerify] FAIL -- 스테이지는 시작됐지만 ActivePlayers={activePlayers} < 필요 {required}명 -- 채움 봇 투입이 실패했습니다.");
+                }
+                else if (EditorApplication.timeSinceStartup - SessionState.GetFloat(KeyPassDetectedAt, 0f) > SettleSeconds)
+                {
+                    Finish("스테이지 시작 확인", SessionState.GetBool(KeyPassResult, false));
+                    return;
+                }
             }
         }
 
