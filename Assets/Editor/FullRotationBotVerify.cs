@@ -31,6 +31,7 @@ public static class FullRotationBotVerify
     private const string KeyActive = "FullRotationBotVerify.Active";
     private const string KeyHostStarted = "FullRotationBotVerify.HostStarted";
     private const string KeyBotsLaunched = "FullRotationBotVerify.BotsLaunched";
+    private const string KeyHostReadySent = "FullRotationBotVerify.HostReadySent";
     private const string KeyStartTime = "FullRotationBotVerify.StartTime";
     private const string KeyMaxStageSeen = "FullRotationBotVerify.MaxStageSeen";
 
@@ -48,6 +49,7 @@ public static class FullRotationBotVerify
         SessionState.SetBool(KeyActive, true);
         SessionState.SetBool(KeyHostStarted, false);
         SessionState.SetBool(KeyBotsLaunched, false);
+        SessionState.SetBool(KeyHostReadySent, false);
         SessionState.EraseFloat(KeyStartTime);
         SessionState.SetInt(KeyMaxStageSeen, -1);
         EditorApplication.isPlaying = true;
@@ -97,6 +99,22 @@ public static class FullRotationBotVerify
         {
             LaunchBots(BotCount);
             SessionState.SetBool(KeyBotsLaunched, true);
+        }
+
+        // StartHost()는 서버+클라이언트를 겸하므로 호스트 자신의 플레이어 오브젝트도
+        // 스폰된다(BotController.OnNetworkSpawn 참고). 이 가짜 플레이어는 -bot 프로세스가
+        // 아니라 BotController가 비활성 상태로 남아 스스로 준비를 알리지 않으므로,
+        // 로비의 "전원 준비" 게이트(GameFlowManager.Update의 allReady)가 봇 4개를
+        // 다 채워도 호스트 1명분 때문에 영원히 충족되지 않는다. LobbyReadyFillVerify가
+        // 쓰는 것과 같은 방식으로 이 도구가 직접 "준비 버튼 클릭"을 대신 호출한다 --
+        // 실제 배포(StartServer(), 호스트 플레이어 없음)에는 없는, 이 로컬 테스트
+        // 방식만의 문제다.
+        if (SessionState.GetBool(KeyHostStarted, false) && !SessionState.GetBool(KeyHostReadySent, false)
+            && GameFlowManager.Instance != null && GameFlowManager.Instance.phase.Value == GameFlowManager.GamePhase.Lobby)
+        {
+            GameFlowManager.Instance.RequestReadyServerRpc(true);
+            SessionState.SetBool(KeyHostReadySent, true);
+            Debug.Log("[FullRotationVerify] 호스트 자신의 준비 상태도 전송(가짜 호스트 플레이어가 준비 게이트를 막지 않도록).");
         }
 
         if (GameFlowManager.Instance != null)
