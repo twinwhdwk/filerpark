@@ -213,6 +213,15 @@ public static class GameFlowSceneSetup
         LobbyUI lobbyUI = canvasObj.AddComponent<LobbyUI>();
         lobbyUI.statusText = statusText;
 
+        // 대기실에서 인원만 차면 바로 자동 시작되던 걸 명시적 준비 버튼으로 바꿨다 --
+        // GameFlowManager.RequestReadyServerRpc가 실제 판정을 갖고, 이 버튼은 로컬
+        // 준비 상태를 토글해 알리기만 한다(LobbyUI.OnReadyClicked).
+        Button readyButton = CreateMenuButton(canvasObj.transform, "ReadyButton", new Vector2(0f, -340f), "시작 준비");
+        Text readyButtonLabel = readyButton.GetComponentInChildren<Text>();
+        lobbyUI.readyButton = readyButton;
+        lobbyUI.readyButtonLabel = readyButtonLabel;
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(readyButton.onClick, lobbyUI.OnReadyClicked);
+
         // 처음 접속한 사람에게 조작법을 알려줄 곳이 그동안 아무 데도 없었다 --
         // 화면 하단에 항상 보이는 작은 힌트 한 줄로, 스테이지로 넘어가기 전에
         // 자연스럽게 눈에 들어오게 한다.
