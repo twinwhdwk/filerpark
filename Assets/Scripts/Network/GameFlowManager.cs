@@ -39,9 +39,15 @@ public class GameFlowManager : NetworkBehaviour
     [Header("씬 이름")]
     public string lobbySceneName = "Lobby";
 
+    // 예전엔 접속 인원이 minPlayersToStart 이상이면 자동으로 카운트다운 후 시작했다 --
+    // "대기실에서 바로 시작되는 게 마음에 안 든다"는 피드백으로, 각 참가자가 명시적으로
+    // 준비 버튼을 눌러야 시작되는 방식으로 바꿨다. requiredHeadcountToStart는 스테이지를
+    // 실제로 깰 수 있는 최소 인원(4명, BotController StageAuto 솔루션들이 그 인원 기준으로
+    // 설계됨)이라, 전원이 준비해도 그보다 적으면 fillWaitSeconds만큼 기다렸다가 부족한
+    // 만큼 채움 봇을 자동 투입한다.
     [Header("로비 시작 조건")]
-    public int minPlayersToStart = 1;
-    public float lobbyCountdownSeconds = 5f;
+    public int requiredHeadcountToStart = 4;
+    public float fillWaitSeconds = 5f;
 
     [Header("결과 화면 표시 시간")]
     public float resultsDisplaySeconds = 4f;
@@ -50,8 +56,14 @@ public class GameFlowManager : NetworkBehaviour
         GamePhase.Lobby, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     public readonly NetworkVariable<int> currentStageIndex = new NetworkVariable<int>(
         -1, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    // 채움-대기 카운트다운(전원 준비했지만 인원이 부족해 봇 투입까지 남은 시간) 표시용.
+    // 이전엔 "자동 시작까지 남은 시간"이었지만 의미가 바뀌었을 뿐 필드/UI 소비 경로는
+    // 그대로 재사용한다.
     public readonly NetworkVariable<float> lobbyCountdownRemaining = new NetworkVariable<float>(
         0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    // 접속 클라이언트 중 준비 버튼을 누른 인원 수 -- UI가 "N/M명 준비 완료"를 보여주는 용도.
+    public readonly NetworkVariable<int> readyCount = new NetworkVariable<int>(
+        0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     // 로비의 월드맵 UI에서 플레이어가 직접 스테이지를 고르면 이 값이 채워진다(-1=미선택).
     // 아무도 안 고르면 예전처럼 순서대로 자동 진행되므로, 이 기능이 없어도 이미 검증된
@@ -64,10 +76,11 @@ public class GameFlowManager : NetworkBehaviour
         -1, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     private readonly Dictionary<ulong, int> scores = new Dictionary<ulong, int>();
+    private readonly HashSet<ulong> readyClientIds = new HashSet<ulong>();
 
     private bool lobbySceneLoaded;
-    private bool countdownActive;
-    private float countdownEndsAt;
+    private bool fillWaitActive;
+    private float fillWaitEndsAt;
 
     // Unload 완료를 기다렸다가 이 이름의 씬을 로드한다. 비어있으면 대기 중인 로드가 없다는 뜻.
     private string pendingLoadSceneName;
@@ -121,6 +134,13 @@ public class GameFlowManager : NetworkBehaviour
         {
             BroadcastScoreboard();
         }
+
+        // 준비하고 나간 인원을 안 지우면 "N/M명 준비 완료"가 실제보다 부풀려져
+        // 아무도 다시 안 눌러도 곧바로 전원 준비 완료로 오판할 수 있다.
+        if (readyClientIds.Remove(clientId))
+        {
+            readyCount.Value = readyClientIds.Count;
+        }
     }
 
     private void BeginLoadScene(string sceneName)
@@ -143,9 +163,14 @@ public class GameFlowManager : NetworkBehaviour
     {
         Debug.Log($"[GameFlow] 씬 로드 완료: {sceneName} (완료 {clientsCompleted.Count}명, 타임아웃 {clientsTimedOut.Count}명)");
 
-        foreach (ulong clientId in NetworkManager.Singleton.ConnectedClientsIds)
+        // ConnectedClientsIds 대신 PlayerSetupNGO.ActivePlayers를 순회한다 -- 채움 봇은
+        // 실제 접속이 아니라 ConnectedClientsIds에 없으므로, 예전처럼 ConnectedClientsIds
+        // 기준으로 돌면 씬 전환마다 채움 봇만 이전 씬 좌표에 남겨진다(다음 씬에 SpawnPoint가
+        // 없는 곳에 서 있게 됨).
+        foreach (GameObject player in PlayerSetupNGO.ActivePlayers)
         {
-            RepositionPlayer(clientId);
+            PlayerSetupNGO setup = player.GetComponent<PlayerSetupNGO>();
+            if (setup != null) setup.MoveToSpawnPoint();
         }
     }
 
@@ -195,40 +220,129 @@ public class GameFlowManager : NetworkBehaviour
         }
     }
 
+    // 로비 참가자가 준비 버튼을 누르면 호출된다(LobbyUI.OnReadyClicked). RequireOwnership을
+    // false로 둔 이유는 이 오브젝트를 아무도 "소유"하지 않기 때문(서버가 씬에 직접 배치한
+    // NetworkObject) -- RequestSelectStageServerRpc와 동일한 이유.
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestReadyServerRpc(bool isReady, ServerRpcParams rpcParams = default)
+    {
+        if (phase.Value != GamePhase.Lobby) return;
+
+        ulong clientId = rpcParams.Receive.SenderClientId;
+        bool changed = isReady ? readyClientIds.Add(clientId) : readyClientIds.Remove(clientId);
+        if (!changed) return;
+
+        readyCount.Value = readyClientIds.Count;
+        Debug.Log($"[GameFlow] 준비 상태 변경: clientId={clientId} ready={isReady} ({readyClientIds.Count}/{NetworkManager.Singleton.ConnectedClientsIds.Count})");
+
+        // 준비 상태가 바뀔 때마다 채움-대기 타이머를 재평가하게 둔다 -- 다음 Update()에서
+        // "전원 준비" 조건을 다시 계산하므로 별도 처리가 필요 없다. 다만 대기 중에 누군가
+        // 준비를 취소하면 그 즉시 대기를 멈춰야 자연스럽다.
+        if (!isReady && fillWaitActive)
+        {
+            fillWaitActive = false;
+            lobbyCountdownRemaining.Value = 0f;
+            Debug.Log("[GameFlow] 준비 취소로 인원 채움 대기 중단");
+        }
+    }
+
     private void Update()
     {
         if (!IsServer) return;
         if (phase.Value != GamePhase.Lobby) return;
 
         int connected = NetworkManager.Singleton.ConnectedClientsIds.Count;
-        if (connected >= minPlayersToStart)
+        bool allReady = connected > 0 && readyClientIds.Count >= connected;
+
+        if (!allReady)
         {
-            if (!countdownActive)
+            if (fillWaitActive)
             {
-                countdownActive = true;
-                countdownEndsAt = Time.time + lobbyCountdownSeconds;
-                Debug.Log($"[GameFlow] 시작 카운트다운 개시 ({lobbyCountdownSeconds}초, 접속 {connected}명)");
+                fillWaitActive = false;
+                lobbyCountdownRemaining.Value = 0f;
+                Debug.Log("[GameFlow] 준비 미완료로 인원 채움 대기 취소");
             }
-            // NetworkVariable에 대입할 때마다(값이 미세하게라도 다르면) NGO가 다음 네트워크
-            // 틱에 모든 클라이언트로 그 변경을 복제한다 -- 매 프레임(초당 수십 번) 정확한
-            // 실수값을 대입하면 정작 유일한 소비처인 LobbyUI.cs가 반올림해서 초 단위로만
-            // 보여주는 값을 위해 그만큼의 트래픽을 매 프레임 뿌리는 셈이다. 화면에 실제로
-            // 보이는 정수 초가 바뀔 때만 써서 복제 빈도를 초당 1회 수준으로 줄인다.
-            float remaining = Mathf.Max(0f, countdownEndsAt - Time.time);
-            if (Mathf.RoundToInt(remaining) != Mathf.RoundToInt(lobbyCountdownRemaining.Value))
-            {
-                lobbyCountdownRemaining.Value = remaining;
-            }
-            if (Time.time >= countdownEndsAt)
-            {
-                StartNextStage();
-            }
+            return;
         }
-        else if (countdownActive)
+
+        // 인원 충족 여부는 실제 접속(connected)이 아니라 PlayerSetupNGO.ActivePlayers
+        // 총원(실제 접속 + 이전 로비 사이클에서 이미 투입된 채움 봇)으로 판단한다.
+        // ConnectedClientsIds만 보면, 채움 봇으로 이미 채워진 로비가 다음 사이클에서도
+        // "인원 부족"으로 오판해 매번 새 채움 봇을 추가로 더 투입해 인원이 무한히
+        // 불어난다.
+        int totalActive = PlayerSetupNGO.ActivePlayers.Count;
+
+        if (totalActive >= requiredHeadcountToStart)
         {
-            countdownActive = false;
+            Debug.Log($"[GameFlow] 전원 준비 완료(접속 {connected}명 + 기존 채움 봇, 총 {totalActive}명으로 필요 인원 충족) -- 스테이지 시작");
+            fillWaitActive = false;
             lobbyCountdownRemaining.Value = 0f;
-            Debug.Log("[GameFlow] 인원 부족으로 카운트다운 취소");
+            readyClientIds.Clear();
+            readyCount.Value = 0;
+            StartNextStage();
+            return;
+        }
+
+        // 전원 준비했지만 스테이지를 깨기엔 인원이 부족하다 -- fillWaitSeconds 동안
+        // 다른 참가자가 더 들어오길 기다린다. 새 접속이 생기면 그 인원은 아직 준비 전이라
+        // allReady가 다시 false가 되어 이 대기 자체가 자연스럽게 취소된다(위 !allReady
+        // 분기가 다음 프레임에 처리).
+        if (!fillWaitActive)
+        {
+            fillWaitActive = true;
+            fillWaitEndsAt = Time.time + fillWaitSeconds;
+            Debug.Log($"[GameFlow] 전원 준비 완료했지만 인원 부족(총 {totalActive}/{requiredHeadcountToStart}) -- {fillWaitSeconds}초 후 봇 자동 투입");
+        }
+
+        // NetworkVariable에 대입할 때마다 NGO가 모든 클라이언트로 그 변경을 복제한다 --
+        // 화면에 실제로 보이는 정수 초가 바뀔 때만 써서 복제 빈도를 초당 1회 수준으로 줄인다.
+        float remaining = Mathf.Max(0f, fillWaitEndsAt - Time.time);
+        if (Mathf.RoundToInt(remaining) != Mathf.RoundToInt(lobbyCountdownRemaining.Value))
+        {
+            lobbyCountdownRemaining.Value = remaining;
+        }
+
+        if (Time.time >= fillWaitEndsAt)
+        {
+            int need = requiredHeadcountToStart - totalActive;
+            Debug.Log($"[GameFlow] {fillWaitSeconds}초 경과, 인원 미충원 -- 채움 봇 {need}명 투입");
+            SpawnFillerBots(need);
+
+            fillWaitActive = false;
+            lobbyCountdownRemaining.Value = 0f;
+            readyClientIds.Clear();
+            readyCount.Value = 0;
+            StartNextStage();
+        }
+    }
+
+    // 실제 접속(-bot 프로세스나 사람) 없이 서버가 직접 Player 오브젝트를 스폰해 인원을
+    // 채운다. NetworkConfig.PlayerPrefab을 그대로 재사용하므로 실제 플레이어와 완전히
+    // 동일한 컴포넌트(PlayerMovementNGO/PlayerSetupNGO/BotController 등)를 갖는다 --
+    // BotController.MarkAsFillerBot()만 Spawn() 전에 호출해 StageAuto 로직을 활성화한다.
+    // 기본 Spawn()은 소유자를 서버(NetworkManager.ServerClientId)로 두므로, 여러 채움
+    // 봇을 스폰해도 OwnerClientId는 전부 동일하다 -- 랭크 계산이 OwnerClientId가 아니라
+    // NetworkObjectId 기준(PlayerSetupNGO.GetRank)으로 이미 바뀌어 있어 문제없이 구분된다.
+    private void SpawnFillerBots(int count)
+    {
+        GameObject prefab = NetworkManager.Singleton.NetworkConfig.PlayerPrefab;
+        if (prefab == null)
+        {
+            Debug.LogError("[GameFlow] 채움 봇 스폰 실패: NetworkConfig.PlayerPrefab이 비어 있습니다.");
+            return;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            GameObject instance = Instantiate(prefab);
+
+            BotController bot = instance.GetComponent<BotController>();
+            if (bot != null) bot.MarkAsFillerBot();
+
+            NetworkObject netObj = instance.GetComponent<NetworkObject>();
+            netObj.Spawn();
+
+            Debug.Log($"[GameFlow] 채움 봇 스폰 완료: NetworkObjectId={netObj.NetworkObjectId}");
         }
     }
 
