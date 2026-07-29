@@ -45,6 +45,9 @@ public class BotController : NetworkBehaviour
     private const float AcrossMargin = 0.5f;
     // 스테이지 2: 다리(블록) 입구 앞에서 이미 건너는 동료와 이만큼 거리를 두고 대기한다.
     private const float BridgeQueueGap = 2f;
+    // 스테이지 3: 문 앞에서 대기하는 비운반자끼리, 그리고 운반자와 겹치지 않도록
+    // rank당 이만큼씩 물러서서 줄을 선다.
+    private const float NonCarrierQueueSpacing = 0.8f;
     // 스테이지 4: 팀의 최소 진행도보다 이만큼 이상 앞서면 낙오자를 기다린다.
     private const float AllowedLead = 2.5f;
 
@@ -533,10 +536,18 @@ public class BotController : NetworkBehaviour
         // 벽 역할) 문이 열리기 전에 목표 좌표가 문 너머라도 물리적으로 문 앞에서
         // 멈추므로, 이 이동은 조기 통과 위험이 전혀 없다 -- 실제로 열렸을 때만
         // 통과할 수 있다는 판정은 여전히 KeyDoorNGO 콜라이더 자체가 보장한다.
+        //
+        // UpdateKeyCarrier()가 서는 지점(doorX-0.6f)과 겹치지 않게 rank만큼 한 걸음씩
+        // 더 물러선 지점에 줄을 선다 -- 처음엔 모든 비운반자가 운반자와 정확히 같은
+        // 지점을 목표로 삼았는데, Player 레이어 자체 충돌이 켜져 있어(스택/밀기 기믹의
+        // 전제조건) 여러 명이 그 한 지점에 몰려 있으면 운반자가 그 무리를 물리적으로
+        // 뚫고 문 앞까지 못 가 열쇠를 배달 못 하는 정체가 실제로 재현됐다(9분 넘게
+        // [KeyDoor] 로그가 한 줄도 안 남음). rank(1부터 시작, 0은 운반자)만큼 물러서면
+        // 자연스러운 줄서기가 되면서 운반자의 길을 막지 않는다.
         float doorX = keyDoor != null ? keyDoor.transform.position.x : 7f;
         if (!doorOpen)
         {
-            MoveToward(doorX - 0.6f);
+            MoveToward(doorX - 0.6f - rank * NonCarrierQueueSpacing);
             return;
         }
 
