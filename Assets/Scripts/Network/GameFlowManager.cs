@@ -97,7 +97,6 @@ public class GameFlowManager : NetworkBehaviour
         NetworkManager.Singleton.SceneManager.OnUnloadEventCompleted += HandleUnloadEventCompleted;
 
         BeginLoadScene(lobbySceneName);
-        lobbySceneLoaded = true;
     }
 
     public override void OnNetworkDespawn()
@@ -162,6 +161,20 @@ public class GameFlowManager : NetworkBehaviour
     private void HandleLoadEventCompleted(string sceneName, LoadSceneMode loadSceneMode, List<ulong> clientsCompleted, List<ulong> clientsTimedOut)
     {
         Debug.Log($"[GameFlow] 씬 로드 완료: {sceneName} (완료 {clientsCompleted.Count}명, 타임아웃 {clientsTimedOut.Count}명)");
+
+        // lobbySceneLoaded는 여기서만 true로 켠다 -- "로비를 요청했다"가 아니라 "로비
+        // 씬이 실제로 다 로드됐다"를 뜻해야 한다. 예전엔 BeginLoadScene(lobbySceneName)을
+        // 부르는 시점(OnNetworkSpawn/ReturnToLobbyAfterResults)에 곧바로 true를 켰는데,
+        // 봇이 매 프레임 즉시 재준비하도록 고친 뒤(BotController) 실제로 겪은 문제:
+        // 로비 phase가 되자마자 봇들이 그 프레임에 바로 다 준비를 마쳐 Update()가
+        // StartNextStage()를 부르는데, 그 시점에 로비 씬은 아직 로드 중이라
+        // NetworkSceneManager.UnloadScene(로비)가 "SceneNotLoaded" 상태로 조용히
+        // 실패하고(반환값을 안 봐서 에러도 없이 그냥 멈춘 것처럼 보임) pendingLoadSceneName만
+        // 영영 채워진 채 다음 씬이 로드되지 않아 로테이션이 Stage2에서 영구 정지했다.
+        if (sceneName == lobbySceneName)
+        {
+            lobbySceneLoaded = true;
+        }
 
         // ConnectedClientsIds 대신 PlayerSetupNGO.ActivePlayers를 순회한다 -- 채움 봇은
         // 실제 접속이 아니라 ConnectedClientsIds에 없으므로, 예전처럼 ConnectedClientsIds
@@ -250,6 +263,14 @@ public class GameFlowManager : NetworkBehaviour
     {
         if (!IsServer) return;
         if (phase.Value != GamePhase.Lobby) return;
+        // phase는 Lobby로 바뀌지만 실제 로비 씬은 아직 로드 중인 짧은 구간이 있다
+        // (BeginUnloadScene(이전 씬) -> ... -> BeginLoadScene(Lobby) -> 로드 완료까지).
+        // 그 구간에도 봇은 이미 phase==Lobby를 보고 즉시 재준비를 보내므로, 이 가드가
+        // 없으면 로비 씬이 실제로 존재하기도 전에 StartNextStage()가 불려
+        // NetworkSceneManager.UnloadScene(로비)가 SceneNotLoaded로 조용히 실패하고
+        // 다음 스테이지가 영영 로드되지 않는다(FullRotationBotVerify로 재현: Stage2
+        // 진입 직후 영구 정지).
+        if (!lobbySceneLoaded) return;
 
         int connected = NetworkManager.Singleton.ConnectedClientsIds.Count;
         bool allReady = connected > 0 && readyClientIds.Count >= connected;
@@ -450,7 +471,10 @@ public class GameFlowManager : NetworkBehaviour
         // 매번 0번(Stage01)부터 다시 시작해 버려 stageSceneNames의 나머지 스테이지가
         // 영원히 실행되지 않는다(1개짜리 배열일 때는 어차피 항상 0번이라 안 드러났던
         // 버그). 순서 진행은 StartNextStage()의 래핑 로직에 맡긴다.
-        lobbySceneLoaded = true;
+        //
+        // lobbySceneLoaded는 여기서 켜지 않는다 -- 로비 씬 로드를 "요청"하는 시점일 뿐
+        // 아직 실제로 로드되지 않았다. HandleLoadEventCompleted가 실제 로드 완료를
+        // 확인하고 켠다(그 이유는 그 함수의 주석 참고).
 
         if (stageScene.IsValid())
         {
