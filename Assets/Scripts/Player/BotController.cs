@@ -135,6 +135,15 @@ public class BotController : NetworkBehaviour
         enabled = BotProcess.IsBot || isFillerBot;
         if (!enabled) return;
 
+        // 로비의 "준비" 버튼은 사람이 직접 눌러야 하는 UI 클릭이라, 이 버튼을 누를 수
+        // 없는 봇은 그대로 두면 전원 준비 조건(GameFlowManager.Update의 allReady)이
+        // 영원히 충족되지 않아 로비에서 무한 대기하게 된다. 봇은 접속하는 순간부터
+        // 이미 플레이할 준비가 된 상태이므로(사람의 "확인 클릭"에 대응하는 망설임이
+        // 없다), 스폰 직후 스스로 준비 완료를 알린다 -- 사람 접속 화면의 "확인" 버튼
+        // 클릭을 NetworkBootstrapper가 봇 대신 즉시 ConnectToServer()로 건너뛰는 것과
+        // 같은 이유의 같은 패턴.
+        GameFlowManager.Instance?.RequestReadyServerRpc(true);
+
         spawnPosition = transform.position;
         progressAnchorX = transform.position.x;
         lastProgressTime = Time.time;
