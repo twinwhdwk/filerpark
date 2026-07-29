@@ -102,8 +102,6 @@ public static class GameFlowSceneSetup
             "Stage05_TwinGatekeeper",
         };
         flow.lobbySceneName = "Lobby";
-        flow.minPlayersToStart = 1;
-        flow.lobbyCountdownSeconds = 5f;
         flow.resultsDisplaySeconds = 4f;
 
         // 오디오/일시정지/접속-끊김 UI -- 전부 Bootstrap 씬(절대 언로드 안 됨)에
