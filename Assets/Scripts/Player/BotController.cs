@@ -123,6 +123,10 @@ public class BotController : NetworkBehaviour
     private float reactionDelay;
     private float doorOpenSince = -1f;
     private float blockInPlaceSince = -1f;
+    // 스테이지 3: 이번 스테이지 동안 KeyDoor1이 한 번이라도 열린 적 있는지. 매 프레임
+    // isOpen을 그대로 읽는 doorOpenSince와 달리 절대 false로 되돌아가지 않는
+    // "누적" 플래그다 -- UpdateKeyRelay의 비운반자 대기 게이트가 여기 의존한다.
+    private bool doorHasOpenedThisStage;
     // 새 스테이지에 막 들어온 순간을 표시한다 -- goal이 null(로비/전환 공백)에서
     // non-null(스테이지 로드됨)로 바뀌는 프레임만 "새 스테이지 진입"으로 본다.
     private float stageEnteredAt = -1f;
@@ -245,6 +249,7 @@ public class BotController : NetworkBehaviour
             // 다음에 이 스테이지를 클리어하고 로비로 돌아오면 새 준비 게이트를
             // 다시 통과해야 하므로 리셋해둔다.
             readySentForCurrentLobby = false;
+            doorHasOpenedThisStage = false;
             // 봇이 씬에 있는 기믹만 보고 스스로 스테이지를 판별하는 구조라(클래스
             // 상단 주석 참고), "이 봇이 지금 뭘 정답으로 골랐는지"가 겉으로는 전혀
             // 안 보인다 -- 의도한 스테이지가 아닌 다른 걸로 오판했는지 여부를 로그
@@ -538,40 +543,49 @@ public class BotController : NetworkBehaviour
 
         // --- 비운반자 ---
         bool doorOpen = keyDoor != null && keyDoor.isOpen.Value;
-        if (doorOpen && doorOpenSince < 0f) doorOpenSince = Time.time;
-        if (!doorOpen) doorOpenSince = -1f;
+        if (doorOpen)
+        {
+            if (doorOpenSince < 0f) doorOpenSince = Time.time;
+            // 한 프레임짜리 스침(운반자가 아직 자기 자리에 채 도착/정착하기 전, 지나가는
+            // 길에 문 판정 범위를 스치기만 한 순간)까지 "열렸다"로 믿으면 안 된다 --
+            // 처음엔 isOpen이 true가 되는 그 즉시 doorHasOpenedThisStage를 세웠는데,
+            // 그러면 대기 중이던 비운반자 전원이 그 스치는 한 프레임에 한꺼번에 풀려나
+            // 아직 자리를 못 잡은 운반자 앞으로 몰려들어 처음 겪던 문제(운반자가 자기
+            // 자리 x=6.4까지 못 감)를 그대로 재현했다(실측). AllOthersAcrossStable과
+            // 같은 취지로, isOpen이 DoorOpenStableDelay 동안 끊김 없이 유지돼야만
+            // "운반자가 실제로 자리 잡았다"고 믿는다.
+            if (Time.time - doorOpenSince >= DoorOpenStableDelay) doorHasOpenedThisStage = true;
+        }
+        else
+        {
+            doorOpenSince = -1f;
+        }
 
-        // 운반자가 아직 열쇠를 줍기 전이면 문 쪽으로 출발하지 않고 스폰 자리에서
-        // 기다린다 -- 스폰 지점(-6..6)이 열쇠(x=0)를 감싸고 있어서, 비운반자들이
-        // 곧바로 문(x=7) 쪽으로 걷기 시작하면 반대편에서 열쇠로 다가가는 운반자와
-        // 정확히 같은 구간(대략 x=0~4)을 동시에 지나가게 된다. 실측: 라이브 서버에서
-        // 운반자가 pickupRadius(2) 밖 dist=2.6~3.0에서 197번 pickup을 거부당하며
-        // 다시는 안 좁혀지는 정체가 있었는데, 그 구간이 바로 비운반자들이 지나가는
-        // 길목과 겹친다 -- 팀원 혼잡 회복(TeammateBlockGraceTime)은 지형 이음매용
-        // 점프 기동이라 같은 높이의 옆 사람을 넘어서게는 잘 안 통한다(이 게임엔
-        // 좌우 회피 이동이 없다). 아예 길이 안 겹치게 막는 편이 더 확실하다. 열쇠가
-        // 잡히면(=carrierClientId != NoCarrier) 그 즉시 문으로 출발한다.
-        bool keyCarried = key != null && key.carrierClientId.Value != CarryableKeyNGO.NoCarrier;
-        if (!keyCarried)
+        // 문이 "이번 스테이지에서 안정적으로 열린 적"이 없으면 스폰 자리에서
+        // 기다린다 -- 처음엔 "열쇠가 잡히면(carrierClientId != NoCarrier) 곧장
+        // 출발"로 완화했었는데, 그것만으로는 부족했다: 운반자가 열쇠를 줍고 나서도
+        // 문 앞(doorX-0.6)까지 걸어가는 동안 비운반자들이 rank만큼 물러선 대기
+        // 지점(doorX-0.6-rank*spacing, 대략 x=4.0~5.6)으로 곧장 몰려가는데, 운반자가
+        // 열쇠를 주운 x=0 근처에서 자기 대기 지점 x=6.4까지 가려면 바로 그 구간을
+        // 지나가야 한다 -- 실측: 라이브 서버에서 운반자가 delta.x=-1.6~-2.7(문에서
+        // 그만큼 못 미친 지점)에 갇혀 문이 단 한 번도 안 열린 채 정체했다(비운반자들이
+        // 자기 대기 지점을 이미 선점해 운반자의 길을 막음). 문이 실제로 한 번 열렸다는
+        // 건 운반자가 그 구간을 이미 통과해 자기 자리에 도착했다는 뜻이므로, 그때까지는
+        // 비운반자를 완전히 묶어두면 애초에 마주칠 일이 없다.
+        if (!doorHasOpenedThisStage)
         {
             HorizontalInput = 0f;
             return;
         }
 
-        // 문이 닫혀 있는 동안엔 스폰 자리에 얼어붙어 있는 대신 문 앞까지 걸어가 줄을
-        // 선다 -- 실제 사람이라면 잠긴 문이 보이는데 출발선에 가만히 서서 기다리지
-        // 않는다. KeyDoor1은 닫혀 있을 때 트리거가 아닌 실체 콜라이더라(문 자체가
-        // 벽 역할) 문이 열리기 전에 목표 좌표가 문 너머라도 물리적으로 문 앞에서
-        // 멈추므로, 이 이동은 조기 통과 위험이 전혀 없다 -- 실제로 열렸을 때만
-        // 통과할 수 있다는 판정은 여전히 KeyDoorNGO 콜라이더 자체가 보장한다.
-        //
-        // UpdateKeyCarrier()가 서는 지점(doorX-0.6f)과 겹치지 않게 rank만큼 한 걸음씩
-        // 더 물러선 지점에 줄을 선다 -- 처음엔 모든 비운반자가 운반자와 정확히 같은
-        // 지점을 목표로 삼았는데, Player 레이어 자체 충돌이 켜져 있어(스택/밀기 기믹의
-        // 전제조건) 여러 명이 그 한 지점에 몰려 있으면 운반자가 그 무리를 물리적으로
-        // 뚫고 문 앞까지 못 가 열쇠를 배달 못 하는 정체가 실제로 재현됐다(9분 넘게
-        // [KeyDoor] 로그가 한 줄도 안 남음). rank(1부터 시작, 0은 운반자)만큼 물러서면
-        // 자연스러운 줄서기가 되면서 운반자의 길을 막지 않는다.
+        // 문이 닫혀 있는 동안엔(문이 열렸다가 다시 살짝 닫힌 경우) 스폰 자리에 얼어붙어
+        // 있는 대신 문 앞까지 걸어가 줄을 선다 -- 실제 사람이라면 잠긴 문이 보이는데
+        // 그 자리에 가만히 서서 기다리지 않는다. KeyDoor1은 닫혀 있을 때 트리거가
+        // 아닌 실체 콜라이더라(문 자체가 벽 역할) 문이 열리기 전에 목표 좌표가 문
+        // 너머라도 물리적으로 문 앞에서 멈추므로, 이 이동은 조기 통과 위험이 전혀
+        // 없다 -- 실제로 열렸을 때만 통과할 수 있다는 판정은 여전히 KeyDoorNGO
+        // 콜라이더 자체가 보장한다. UpdateKeyCarrier()가 서는 지점(doorX-0.6f)과
+        // 겹치지 않게 rank만큼 한 걸음씩 더 물러선 지점에 줄을 선다.
         float doorX = keyDoor != null ? keyDoor.transform.position.x : 7f;
         if (!doorOpen)
         {
@@ -840,6 +854,10 @@ public class BotController : NetworkBehaviour
     // 동시에 실행하지 않는 서로 다른 스테이지 분기라 타이머 필드 하나를 공유해도 안전하다.
     private const float AcrossStableDelay = 0.3f;
     private float allAcrossSince = -1f;
+    // 스테이지 3: KeyDoorNGO.isOpen이 이만큼 끊김 없이 유지돼야 "문이 실제로 열렸다"고
+    // 믿는다(UpdateKeyRelay의 doorHasOpenedThisStage 게이트가 쓴다) -- 취지는
+    // AcrossStableDelay와 동일하다.
+    private const float DoorOpenStableDelay = 0.3f;
 
     private bool AllOthersAcrossStable(float acrossX)
     {

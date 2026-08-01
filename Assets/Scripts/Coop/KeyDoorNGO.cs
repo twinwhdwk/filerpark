@@ -34,6 +34,8 @@ public class KeyDoorNGO : NetworkBehaviour
         isOpen.OnValueChanged -= OnDoorStateChanged;
     }
 
+    private float nextTraceLogTime;
+
     private void FixedUpdate()
     {
         if (!IsServer || key == null) return;
@@ -42,11 +44,30 @@ public class KeyDoorNGO : NetworkBehaviour
         Vector2 threshold = isOpen.Value ? openRange + closeHysteresis : openRange;
         bool keyHere = Mathf.Abs(delta.x) < threshold.x && Mathf.Abs(delta.y) < threshold.y;
         isOpen.Value = keyHere;
+
+        // 열림/닫힘 전환 순간의 스냅샷만으로는 "천천히 진동하는지 급격히 왕복하는지"를
+        // 구분하기 어려워서, 열쇠가 실제로 운반 중인 동안엔 매 1초 궤적도 남긴다.
+        if (key.carrierClientId.Value != CarryableKeyNGO.NoCarrier && Time.time >= nextTraceLogTime)
+        {
+            nextTraceLogTime = Time.time + 1f;
+            Debug.Log($"[KeyDoor][trace] delta=({delta.x:F2},{delta.y:F2}) isOpen={isOpen.Value} carrier={key.carrierClientId.Value}");
+        }
     }
 
     private void OnDoorStateChanged(bool previousValue, bool newValue)
     {
-        Debug.Log($"[KeyDoor] {gameObject.name} {(newValue ? "열림" : "닫힘")}");
+        // 서버 쪽에서만 열쇠 위치/캐리어 정보를 같이 남긴다 -- 히스테리시스를 넓혔는데도
+        // 여전히 반복 깜빡이는 원인이 "경계 부근 미세한 밀림"인지 "운반자가 실제로 문에서
+        // 꽤 멀어졌다가 돌아오는 큰 폭 왕복"인지 열림/닫힘 로그만으로는 구분이 안 됐다.
+        if (IsServer && key != null)
+        {
+            Vector2 delta = key.transform.position - transform.position;
+            Debug.Log($"[KeyDoor] {gameObject.name} {(newValue ? "열림" : "닫힘")} delta=({delta.x:F2},{delta.y:F2}) carrier={key.carrierClientId.Value} keyPos=({key.transform.position.x:F2},{key.transform.position.y:F2})");
+        }
+        else
+        {
+            Debug.Log($"[KeyDoor] {gameObject.name} {(newValue ? "열림" : "닫힘")}");
+        }
         UpdateDoorVisuals(newValue);
         AudioManager.Instance?.PlaySfx(newValue ? SfxId.DoorOpen : SfxId.DoorClose);
     }
