@@ -127,6 +127,16 @@ public class BotController : NetworkBehaviour
     // isOpen을 그대로 읽는 doorOpenSince와 달리 절대 false로 되돌아가지 않는
     // "누적" 플래그다 -- UpdateKeyRelay의 비운반자 대기 게이트가 여기 의존한다.
     private bool doorHasOpenedThisStage;
+    // 스테이지 3: 운반자가 "나머지가 다 건넜다"고 한 번 결론 내리면(AllOthersAcrossStable이
+    // 처음 true가 된 순간) 그 결론을 다시는 번복하지 않는 단방향 래치다. 처음엔 매 프레임
+    // 다시 판정했는데, 시소를 건너는 3명 전원이 동시에 "안정적으로 건넜다"고 계속
+    // 유지하기는 어려워서(한 명이라도 순간적으로 acrossX 아래로 흔들리면 조건이 다시
+    // false가 됨) 운반자가 문으로 이미 떠났다가도 다시 되돌아와 문을 지키기를 반복했다
+    // (실측: 라이브 서버에서 8분 넘게 문 앞↔시소 방향을 왕복, 클리어 안 됨). 일단 떠나기로
+    // 했으면 되돌아오지 않게 해서 이 왕복 자체를 없앤다 -- 스테이지 도중 새 플레이어가
+    // 합류하는 드문 경우 그 플레이어가 못 건널 수 있다는 트레이드오프가 있지만, 거의 항상
+    // 재현되는 데드락을 없애는 쪽이 우선이다.
+    private bool hasCommittedToCross;
     // 새 스테이지에 막 들어온 순간을 표시한다 -- goal이 null(로비/전환 공백)에서
     // non-null(스테이지 로드됨)로 바뀌는 프레임만 "새 스테이지 진입"으로 본다.
     private float stageEnteredAt = -1f;
@@ -250,6 +260,7 @@ public class BotController : NetworkBehaviour
             // 다시 통과해야 하므로 리셋해둔다.
             readySentForCurrentLobby = false;
             doorHasOpenedThisStage = false;
+            hasCommittedToCross = false;
             // 봇이 씬에 있는 기믹만 보고 스스로 스테이지를 판별하는 구조라(클래스
             // 상단 주석 참고), "이 봇이 지금 뭘 정답으로 골랐는지"가 겉으로는 전혀
             // 안 보인다 -- 의도한 스테이지가 아닌 다른 걸로 오판했는지 여부를 로그
@@ -631,8 +642,11 @@ public class BotController : NetworkBehaviour
         }
 
         // 들었음: 나머지가 다 건넜으면 나도 건너 골로(단독이라 시소는 자동으로 수평).
-        if (AllOthersAcrossStable(acrossX))
+        // hasCommittedToCross는 위 필드 선언부 주석 참고 -- 한 번 결론 내리면 번복하지
+        // 않는다.
+        if (hasCommittedToCross || AllOthersAcrossStable(acrossX))
         {
+            hasCommittedToCross = true;
             if (transform.position.x >= acrossX) MoveTowardGoal();
             else CrossSeesawSolo(seesawX);
             return;

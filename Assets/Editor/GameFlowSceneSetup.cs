@@ -256,7 +256,7 @@ public static class GameFlowSceneSetup
         scorePanelRect.sizeDelta = new Vector2(420f, 460f);
         Image scorePanelImage = scorePanel.AddComponent<Image>();
         scorePanelImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite(
-            "Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorPrimary, 40f, 6f);
+            "Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorPrimary, 40f, 6f, withShadow: true);
         scorePanelImage.type = Image.Type.Sliced;
 
         Text scoreHeader = CreateLabel(scorePanel.transform, "ScoreHeader",
@@ -332,7 +332,7 @@ public static class GameFlowSceneSetup
         mapCardRect.anchorMax = new Vector2(0.5f, 0.5f);
         mapCardRect.sizeDelta = new Vector2(mapCardWidth, 580f);
         Image mapCardImage = mapCard.AddComponent<Image>();
-        mapCardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
+        mapCardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f, withShadow: true);
         mapCardImage.type = Image.Type.Sliced;
         mapCard.AddComponent<UIPunchIn>();
 
@@ -362,7 +362,7 @@ public static class GameFlowSceneSetup
         introCardRect.anchorMax = new Vector2(0.5f, 0.5f);
         introCardRect.sizeDelta = new Vector2(900f, 580f);
         Image introCardImage = introCard.AddComponent<Image>();
-        introCardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
+        introCardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f, withShadow: true);
         introCardImage.type = Image.Type.Sliced;
         introCard.AddComponent<UIPunchIn>();
 
@@ -520,7 +520,7 @@ public static class GameFlowSceneSetup
         bannerRect.sizeDelta = new Vector2(640f, 340f);
         Image bannerImage = banner.AddComponent<Image>();
         bannerImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite(
-            "Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorPrimary, 40f, 6f);
+            "Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorPrimary, 40f, 6f, withShadow: true);
         bannerImage.type = Image.Type.Sliced;
         banner.AddComponent<UIPunchIn>();
 
@@ -549,7 +549,7 @@ public static class GameFlowSceneSetup
         // 위험 신호는 브랜드 팔레트의 의도된 예외다 (RisingHazardNGO의 빨간 해저드
         // 색과 동일 계열 -- CLAUDE.md UI Style Guide 참고).
         failBannerImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite(
-            "Assets/Sprites/UI_FailBanner.png", UITheme.ColorBg, new Color(0.9f, 0.25f, 0.15f, 1f), 40f, 6f);
+            "Assets/Sprites/UI_FailBanner.png", UITheme.ColorBg, new Color(0.9f, 0.25f, 0.15f, 1f), 40f, 6f, withShadow: true);
         failBannerImage.type = Image.Type.Sliced;
         failBanner.AddComponent<UIPunchIn>();
 
@@ -1125,7 +1125,7 @@ public static class GameFlowSceneSetup
         buttonRect.anchoredPosition = new Vector2(0f, -100f);
 
         Image buttonImage = buttonObj.AddComponent<Image>();
-        buttonImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonPrimary.png", UITheme.ColorPrimary, UITheme.ColorWhite);
+        buttonImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonPrimaryShadow.png", UITheme.ColorPrimary, UITheme.ColorWhite, withShadow: true);
         buttonImage.type = Image.Type.Sliced;
 
         Button button = buttonObj.AddComponent<Button>();
@@ -1165,7 +1165,7 @@ public static class GameFlowSceneSetup
             settingsButtonRect.sizeDelta = new Vector2(160f, 56f);
 
             Image settingsButtonImage = settingsButtonObj.AddComponent<Image>();
-            settingsButtonImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonPrimary.png", UITheme.ColorIce, UITheme.ColorWhite);
+            settingsButtonImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonIceShadow.png", UITheme.ColorIce, UITheme.ColorWhite, withShadow: true);
             settingsButtonImage.type = Image.Type.Sliced;
 
             Button settingsButton = settingsButtonObj.AddComponent<Button>();
@@ -1252,7 +1252,7 @@ public static class GameFlowSceneSetup
         rect.anchoredPosition = anchoredPosition;
 
         Image image = buttonObj.AddComponent<Image>();
-        image.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonPrimary.png", UITheme.ColorPrimary, UITheme.ColorWhite);
+        image.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonPrimaryShadow.png", UITheme.ColorPrimary, UITheme.ColorWhite, withShadow: true);
         image.type = Image.Type.Sliced;
 
         Button button = buttonObj.AddComponent<Button>();
@@ -1409,7 +1409,7 @@ public static class GameFlowSceneSetup
         cardRect.anchorMax = new Vector2(0.5f, 0.5f);
         cardRect.sizeDelta = new Vector2(480f, 460f);
         Image cardImage = card.AddComponent<Image>();
-        cardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
+        cardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f, withShadow: true);
         cardImage.type = Image.Type.Sliced;
         card.AddComponent<UIPunchIn>();
 
@@ -1432,7 +1432,7 @@ public static class GameFlowSceneSetup
         settingsRect.anchorMax = new Vector2(0.5f, 0.5f);
         settingsRect.sizeDelta = new Vector2(480f, 460f);
         Image settingsImage = settingsPanel.AddComponent<Image>();
-        settingsImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
+        settingsImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f, withShadow: true);
         settingsImage.type = Image.Type.Sliced;
         settingsPanel.AddComponent<UIPunchIn>();
 
@@ -1475,7 +1475,7 @@ public static class GameFlowSceneSetup
         quitConfirmRect.anchorMax = new Vector2(0.5f, 0.5f);
         quitConfirmRect.sizeDelta = new Vector2(480f, 460f);
         Image quitConfirmImage = quitConfirmPanel.AddComponent<Image>();
-        quitConfirmImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
+        quitConfirmImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f, withShadow: true);
         quitConfirmImage.type = Image.Type.Sliced;
         quitConfirmPanel.AddComponent<UIPunchIn>();
 
@@ -1594,7 +1594,7 @@ public static class GameFlowSceneSetup
         cardRect.anchorMax = new Vector2(0.5f, 0.5f);
         cardRect.sizeDelta = new Vector2(520f, 360f);
         Image cardImage = card.AddComponent<Image>();
-        cardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
+        cardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f, withShadow: true);
         cardImage.type = Image.Type.Sliced;
         card.AddComponent<UIPunchIn>();
 

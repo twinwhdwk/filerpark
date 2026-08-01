@@ -345,9 +345,10 @@ public static class NetworkSetupMenu
 
         Image buttonImage = GetOrAddComponent<Image>(buttonObj);
         buttonImage.sprite = GetOrCreateRoundedRectSprite(
-            "Assets/Sprites/UI_ButtonPrimary.png",
+            "Assets/Sprites/UI_ButtonPrimaryShadow.png",
             UITheme.ColorPrimary,
-            UITheme.ColorWhite);
+            UITheme.ColorWhite,
+            withShadow: true);
         buttonImage.type = Image.Type.Sliced;
 
         Button button = GetOrAddComponent<Button>(buttonObj);
@@ -670,7 +671,7 @@ public static class NetworkSetupMenu
             nodeRect.anchoredPosition = new Vector2(startX + spacing * i, 0f);
 
             Image nodeImage = GetOrAddComponent<Image>(nodeObj);
-            nodeImage.sprite = GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonPrimary.png", UITheme.ColorPrimary, UITheme.ColorWhite);
+            nodeImage.sprite = GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonPrimaryShadow.png", UITheme.ColorPrimary, UITheme.ColorWhite, withShadow: true);
             nodeImage.type = Image.Type.Sliced;
 
             Button nodeButton = GetOrAddComponent<Button>(nodeObj);
@@ -729,7 +730,7 @@ public static class NetworkSetupMenu
         stageIntro.playerCountText = introPlayerCount;
 
         // 시작/뒤로 버튼 -- ConnectButton과 동일한 라운드 스프라이트 재사용.
-        Sprite roundedSprite = GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonPrimary.png", UITheme.ColorPrimary, UITheme.ColorWhite);
+        Sprite roundedSprite = GetOrCreateRoundedRectSprite("Assets/Sprites/UI_ButtonPrimaryShadow.png", UITheme.ColorPrimary, UITheme.ColorWhite, withShadow: true);
 
         GameObject startBtnObj = FindChild(introPanel.transform, "StartButton");
         if (startBtnObj == null)
@@ -892,8 +893,20 @@ public static class NetworkSetupMenu
     // 거리함수 -- Inigo Quilez의 공식). 9-slice로 늘어나도 모서리가 안 뭉개지도록
     // spriteBorder를 radius+border만큼 잡아준다. UI Style Guide의 "배지/스티커"
     // 버튼 모양(라운드 6px급, 굵은 테두리)을 표현하는 용도.
+    // withShadow: UI Style Guide가 명시하는 "레이어드 flat rgba(0,0,0,.25/.5/.75) 오프셋을
+    // 쌓아 두툼한 물리적 블록/큐브가 하드엣지 그림자를 드리우는 것처럼" 보이는 깊이감을
+    // 실제로 굽는다 -- 지금까지 이 스타일 가이드 항목 자체가 코드로는 전혀 구현되지
+    // 않아서(순수 라운드+테두리뿐), 모든 버튼/카드가 실제 PICO PARK보다 납작하고
+    // 밋밋해 보였다. 세 겹의 진한 회색 사본을 우하단으로 점점 크게 오프셋해 깔고 그
+    // 위에 본 도형을 그린다(부드러운 블러 대신 하드엣지 -- 스타일 가이드가 명시적으로
+    // 지양하는 게 블러 드롭섀도우다). 그림자가 캔버스 밖으로 잘리지 않도록 shadowMargin만큼
+    // 캔버스를 넓히고, spriteBorder도 같은 만큼 넓혀서 9-slice 확대 시 그림자 오프셋
+    // 비율이 원본과 동일하게 유지되게 한다. 슬라이더 채움/토글 체크처럼 작은 인디케이터는
+    // 여전히 withShadow=false(기본값)로 둬서 그림자 없는 플랫 스타일을 유지한다.
+    private static readonly Color ShadowColor = Color.black;
+
     internal static Sprite GetOrCreateRoundedRectSprite(string path, Color fillColor, Color borderColor,
-        float radius = 28f, float borderThickness = 10f)
+        float radius = 28f, float borderThickness = 10f, bool withShadow = false)
     {
         Sprite existing = AssetDatabase.LoadAssetAtPath<Sprite>(path);
         if (existing != null)
@@ -903,31 +916,73 @@ public static class NetworkSetupMenu
 
         EnsureFolder(Path.GetDirectoryName(path).Replace("\\", "/"));
 
-        const int size = 128;
+        const int baseSize = 128;
+        // 3겹 중 가장 바깥 그림자의 오프셋(base 128 기준 6px)까지 캔버스 안에 들어오게
+        // 여유를 둔다. 그림자가 없으면 예전과 동일하게 여백 0.
+        float shadowMargin = withShadow ? 8f : 0f;
+        int size = Mathf.RoundToInt(baseSize + shadowMargin * 2f);
 
         Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
         Color[] pixels = new Color[size * size];
         Vector2 center = new Vector2(size / 2f, size / 2f);
-        Vector2 innerHalfSize = center - new Vector2(radius, radius);
+        Vector2 innerHalfSize = new Vector2(baseSize / 2f, baseSize / 2f) - new Vector2(radius, radius);
+
+        // 하드엣지 라운드 사각형 SDF까지의 거리(d)만 계산 -- 채움/테두리 색은 이 함수를
+        // 본 도형과 그림자 레이어가 공유하되, 그림자는 항상 단색(ShadowColor)만 쓴다.
+        float Distance(Vector2 p)
+        {
+            Vector2 q = new Vector2(Mathf.Abs(p.x), Mathf.Abs(p.y)) - innerHalfSize;
+            float outsideDist = new Vector2(Mathf.Max(q.x, 0f), Mathf.Max(q.y, 0f)).magnitude;
+            float insideDist = Mathf.Min(Mathf.Max(q.x, q.y), 0f);
+            return outsideDist + insideDist - radius;
+        }
+
+        // 오프셋이 작은 것(진하고 도형에 가까움)부터 큰 것(연하고 멀리)까지가 아니라,
+        // 뒤(멀고 연함)에서부터 그려야 본 도형과 가까운 진한 겹이 그 위에 자연스럽게
+        // 얹힌다 -- 배열 순서 = 그리는 순서(뒤->앞).
+        (float offset, float alpha)[] shadowLayers = {
+            (6f, 0.25f),
+            (4f, 0.5f),
+            (2f, 0.75f),
+        };
 
         for (int y = 0; y < size; y++)
         {
             for (int x = 0; x < size; x++)
             {
-                Vector2 p = new Vector2(x + 0.5f, y + 0.5f) - center;
-                Vector2 q = new Vector2(Mathf.Abs(p.x), Mathf.Abs(p.y)) - innerHalfSize;
-                float outsideDist = new Vector2(Mathf.Max(q.x, 0f), Mathf.Max(q.y, 0f)).magnitude;
-                float insideDist = Mathf.Min(Mathf.Max(q.x, q.y), 0f);
-                float d = outsideDist + insideDist - radius;
+                // Color.a=0(완전 투명)에서 시작해 뒤->앞으로 알파 오버 합성한다.
+                Color result = new Color(0f, 0f, 0f, 0f);
 
-                float outerAlpha = Mathf.Clamp01(0.5f - d);
-                // borderT: d가 -borderThickness보다 바깥쪽(테두리 쪽)이면 1(테두리색),
-                // 안쪽으로 더 들어가면 0(채움색) -- outerAlpha와 부호가 반대라 따로 계산.
-                float borderT = Mathf.Clamp01(0.5f + (d + borderThickness));
-                Color color = Color.Lerp(fillColor, borderColor, borderT);
-                color.a = outerAlpha;
+                if (withShadow)
+                {
+                    foreach ((float offset, float alpha) in shadowLayers)
+                    {
+                        // 우하단으로 그림자를 드리운다: 본 도형 기준(x,y)에서 그림자
+                        // 오프셋만큼 좌상단으로 이동한 지점의 거리를 구하면, 그 결과
+                        // 그림자 도형 자체는 우하단으로 밀려난 것과 동일하다.
+                        Vector2 p = new Vector2(x + 0.5f, y + 0.5f) - center + new Vector2(-offset, offset);
+                        float d = Distance(p);
+                        float shapeAlpha = Mathf.Clamp01(0.5f - d) * alpha;
+                        result = Color.Lerp(result, ShadowColor, shapeAlpha / Mathf.Max(shapeAlpha + result.a * (1f - shapeAlpha), 0.0001f));
+                        result.a = shapeAlpha + result.a * (1f - shapeAlpha);
+                    }
+                }
 
-                pixels[y * size + x] = color;
+                // 본 도형(오프셋 없음)을 맨 위에 합성.
+                {
+                    Vector2 p = new Vector2(x + 0.5f, y + 0.5f) - center;
+                    float d = Distance(p);
+                    float outerAlpha = Mathf.Clamp01(0.5f - d);
+                    float borderT = Mathf.Clamp01(0.5f + (d + borderThickness));
+                    Color shapeColor = Color.Lerp(fillColor, borderColor, borderT);
+
+                    float srcA = outerAlpha;
+                    Color blended = Color.Lerp(result, shapeColor, srcA);
+                    blended.a = srcA + result.a * (1f - srcA);
+                    result = blended;
+                }
+
+                pixels[y * size + x] = result;
             }
         }
 
@@ -946,7 +1001,7 @@ public static class NetworkSetupMenu
             importer.spritePixelsPerUnit = 100;
             importer.filterMode = FilterMode.Bilinear;
             importer.alphaIsTransparency = true;
-            float border = radius + borderThickness;
+            float border = radius + borderThickness + shadowMargin;
             importer.spriteBorder = new Vector4(border, border, border, border);
             importer.SaveAndReimport();
         }
