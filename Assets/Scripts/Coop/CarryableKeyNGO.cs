@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 
@@ -79,9 +80,33 @@ public class CarryableKeyNGO : NetworkBehaviour
         carrierClientId.Value = NoCarrier;
     }
 
+    private float nextNoCarrierLogTime;
+
     private void FixedUpdate()
     {
-        if (!IsServer || carrierClientId.Value == NoCarrier) return;
+        if (!IsServer) return;
+
+        if (carrierClientId.Value == NoCarrier)
+        {
+            // 아무도 안 들고 있는 채로 오래 지속되면(누가 다가가다 막혔는지) 서버 로그에서
+            // 바로 보이게 한다 -- PushableBlockNGO의 상시 정체 로그와 같은 취지. 라이브
+            // 서버에서 운반자가 pickupRadius 밖에 멈춰 다시는 안 좁혀지는 정체가 실측된
+            // 적이 있어서(다른 팀원의 위치까지 같이 남겨야 "누가 막고 있는지" 구분된다).
+            if (Time.time >= nextNoCarrierLogTime)
+            {
+                nextNoCarrierLogTime = Time.time + 3f;
+                var positions = new List<string>();
+                foreach (var p in PlayerSetupNGO.ActivePlayers)
+                {
+                    var no = p.GetComponent<NetworkObject>();
+                    if (no == null) continue;
+                    float dist = Vector2.Distance(p.transform.position, transform.position);
+                    positions.Add($"owner={no.OwnerClientId}/pos=({p.transform.position.x:F2},{p.transform.position.y:F2})/distToKey={dist:F2}");
+                }
+                Debug.Log($"[CarryableKey] {gameObject.name} 아무도 안 들고 있음, key=({transform.position.x:F2},{transform.position.y:F2}) players=[{string.Join(", ", positions)}]");
+            }
+            return;
+        }
 
         if (carrierTransform == null)
         {
