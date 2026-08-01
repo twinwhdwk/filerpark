@@ -541,6 +541,23 @@ public class BotController : NetworkBehaviour
         if (doorOpen && doorOpenSince < 0f) doorOpenSince = Time.time;
         if (!doorOpen) doorOpenSince = -1f;
 
+        // 운반자가 아직 열쇠를 줍기 전이면 문 쪽으로 출발하지 않고 스폰 자리에서
+        // 기다린다 -- 스폰 지점(-6..6)이 열쇠(x=0)를 감싸고 있어서, 비운반자들이
+        // 곧바로 문(x=7) 쪽으로 걷기 시작하면 반대편에서 열쇠로 다가가는 운반자와
+        // 정확히 같은 구간(대략 x=0~4)을 동시에 지나가게 된다. 실측: 라이브 서버에서
+        // 운반자가 pickupRadius(2) 밖 dist=2.6~3.0에서 197번 pickup을 거부당하며
+        // 다시는 안 좁혀지는 정체가 있었는데, 그 구간이 바로 비운반자들이 지나가는
+        // 길목과 겹친다 -- 팀원 혼잡 회복(TeammateBlockGraceTime)은 지형 이음매용
+        // 점프 기동이라 같은 높이의 옆 사람을 넘어서게는 잘 안 통한다(이 게임엔
+        // 좌우 회피 이동이 없다). 아예 길이 안 겹치게 막는 편이 더 확실하다. 열쇠가
+        // 잡히면(=carrierClientId != NoCarrier) 그 즉시 문으로 출발한다.
+        bool keyCarried = key != null && key.carrierClientId.Value != CarryableKeyNGO.NoCarrier;
+        if (!keyCarried)
+        {
+            HorizontalInput = 0f;
+            return;
+        }
+
         // 문이 닫혀 있는 동안엔 스폰 자리에 얼어붙어 있는 대신 문 앞까지 걸어가 줄을
         // 선다 -- 실제 사람이라면 잠긴 문이 보이는데 출발선에 가만히 서서 기다리지
         // 않는다. KeyDoor1은 닫혀 있을 때 트리거가 아닌 실체 콜라이더라(문 자체가

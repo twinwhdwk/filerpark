@@ -84,7 +84,9 @@ public class AudioManager : MonoBehaviour
     private void LoadVolumePrefs()
     {
         MasterVolume = PlayerPrefs.GetFloat(PrefMaster, 1f);
-        MusicVolume = PlayerPrefs.GetFloat(PrefMusic, 0.5f);
+        // 배경음악 기본값은 꺼둔다(요청: 효과음은 괜찮지만 배경음이 거슬림) -- 필요하면
+        // 설정 패널의 슬라이더로 언제든 직접 올릴 수 있다. 효과음 기본값은 그대로.
+        MusicVolume = PlayerPrefs.GetFloat(PrefMusic, 0f);
         SfxVolume = PlayerPrefs.GetFloat(PrefSfx, 0.8f);
     }
 

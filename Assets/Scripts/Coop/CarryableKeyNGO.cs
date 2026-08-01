@@ -8,7 +8,7 @@ using Unity.Netcode;
 // ServerRpc라 클라이언트가 원격 캐릭터의 열쇠를 임의로 주울 수 없다.
 public class CarryableKeyNGO : NetworkBehaviour
 {
-    private const ulong NoCarrier = ulong.MaxValue;
+    public const ulong NoCarrier = ulong.MaxValue;
 
     // 봇(그리고 사람 클라이언트도 마찬가지)이 "가까워졌다"고 판단하는 로컬
     // transform.position은 서버의 NetworkTransform 보간을 거친 값이라 실시간

@@ -22,6 +22,7 @@ public static class Stage03BotVerify
     private const string KeyBotsLaunched = "Stage03BotVerify.BotsLaunched";
     private const string KeyStartTime = "Stage03BotVerify.StartTime";
     private const string KeyLastPosLogTime = "Stage03BotVerify.LastPosLogTime";
+    private const string KeyHostReadySent = "Stage03BotVerify.HostReadySent";
 
     [MenuItem("Tools/Coop Setup/Debug: Stage03 Bot Verify")]
     public static void Run()
@@ -46,6 +47,7 @@ public static class Stage03BotVerify
         SessionState.SetBool(KeyActive, true);
         SessionState.SetBool(KeyHostStarted, false);
         SessionState.SetBool(KeyBotsLaunched, false);
+        SessionState.SetBool(KeyHostReadySent, false);
         SessionState.EraseFloat(KeyStartTime);
         EditorApplication.isPlaying = true;
     }
@@ -94,6 +96,23 @@ public static class Stage03BotVerify
         {
             LaunchBots(4);
             SessionState.SetBool(KeyBotsLaunched, true);
+        }
+
+        // StartHost()의 가짜 호스트 플레이어는 BotController가 비활성 상태라 스스로
+        // 준비를 안 보내, 로비의 "전원 준비" 게이트가 봇 4개를 다 채워도 영원히
+        // 충족되지 않는다(실측: 이 도구가 원래 이 처리가 없어서 180초 타임아웃 내내
+        // 로비에서 한 발짝도 못 나감 -- Stage03 진입 로그 자체가 안 남았다).
+        // FullRotationBotVerify와 같은 패턴으로 로비에 있는 동안 대신 준비를 보낸다.
+        bool inLobbyNow = GameFlowManager.Instance != null && GameFlowManager.Instance.phase.Value == GameFlowManager.GamePhase.Lobby;
+        if (!inLobbyNow)
+        {
+            SessionState.SetBool(KeyHostReadySent, false);
+        }
+        else if (SessionState.GetBool(KeyHostStarted, false) && !SessionState.GetBool(KeyHostReadySent, false))
+        {
+            GameFlowManager.Instance.RequestReadyServerRpc(true);
+            SessionState.SetBool(KeyHostReadySent, true);
+            Debug.Log("[Stage03Verify] 호스트 자신의 준비 상태도 전송(가짜 호스트 플레이어가 준비 게이트를 막지 않도록).");
         }
 
         if (GameFlowManager.Instance != null && GameFlowManager.Instance.phase.Value == GameFlowManager.GamePhase.Results)
