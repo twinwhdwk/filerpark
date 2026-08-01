@@ -59,7 +59,17 @@ public static class GameFlowSceneSetup
 
         // 유일하게 AudioListener를 갖는 카메라 -- Bootstrap은 절대 언로드되지 않으므로
         // 이 하나로 Lobby/Stage 어디를 오가든 항상 충분하다 (CreateOrthoCamera 주석 참고).
-        CreateOrthoCamera(false, withAudioListener: true);
+        //
+        // Camera 자체는 껴둔다(enabled=false) -- Bootstrap은 절대 언로드되지 않아 이
+        // 카메라가 Lobby/Stage가 추가로 로드하는 자기 카메라와 항상 동시에 떠 있는데,
+        // 렌더링할 스프라이트가 하나도 없는 이 카메라가 (깊이값이 같은 두 카메라 사이의
+        // 정의되지 않은 렌더 순서 때문에) Lobby/Stage 카메라가 그린 화면을 자기
+        // 배경색으로 덮어써 버리는 걸 실측했다(스탠드얼론 빌드에서 스크린샷으로 확인 --
+        // UI Canvas(Screen Space Overlay)만 보이고 게임 월드가 통째로 안 보임, 사운드는
+        // 카메라와 무관하니 정상 재생). AudioListener는 이 GameObject가 활성 상태이기만
+        // 하면 되고 Camera 컴포넌트의 enabled와는 무관하므로, 렌더링만 끈다.
+        Camera bootstrapCamera = CreateOrthoCamera(false, withAudioListener: true);
+        bootstrapCamera.enabled = false;
 
         GameObject nmObj = new GameObject("NetworkManager");
         NetworkManager networkManager = nmObj.AddComponent<NetworkManager>();
@@ -1033,10 +1043,18 @@ public static class GameFlowSceneSetup
     // 이 컴포넌트를 하나씩 더 붙여서, Lobby/Stage가 Bootstrap과 함께 로드될 때마다
     // "There are 2 audio listeners" 경고가 매 프레임 콘솔/서버 로그에 쌓이는 문제가
     // 있었다(실측: 헤드리스 스모크 테스트 로그가 수백만 줄로 불어남).
-    private static void CreateOrthoCamera(bool withFollow, bool withAudioListener = false)
+    private static Camera CreateOrthoCamera(bool withFollow, bool withAudioListener = false)
     {
         GameObject camObj = new GameObject("Main Camera");
         camObj.tag = "MainCamera";
+        // z=-10: 이 씬의 모든 스프라이트(바닥/버튼/문/플레이어 등)는 z=0에 놓인다.
+        // 카메라 기본 위치(0,0,0)에 그대로 두면 카메라와 스프라이트가 정확히 같은
+        // z평면에 있어 near clip plane(0.3)보다 가까운(거리 0) 위치가 되어 아무것도
+        // 렌더링되지 않는다 -- UI Canvas(Screen Space Overlay, 카메라 프러스텀과 무관)만
+        // 보이고 게임 월드 전체가 안 보이는 증상으로 실측 확인(스탠드얼론 빌드 스크린샷 +
+        // 실제 사용자 리포트: 타이틀/스테이지 라벨만 보이고 나머지는 배경색뿐). 2D
+        // 카메라의 관례적 배치인 z=-10으로 옮겨 스프라이트들이 [near, far] 안에 들어오게 한다.
+        camObj.transform.position = new Vector3(0f, 0f, -10f);
         Camera cam = camObj.AddComponent<Camera>();
         cam.orthographic = true;
         cam.orthographicSize = 6f;
@@ -1048,6 +1066,7 @@ public static class GameFlowSceneSetup
         {
             camObj.AddComponent<CoopCameraFollow>();
         }
+        return cam;
     }
 
     private static void BuildConnectUI(GameObject networkManagerObj, PauseMenuUI pauseMenu)

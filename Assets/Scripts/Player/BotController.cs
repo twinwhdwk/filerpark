@@ -364,7 +364,7 @@ public class BotController : NetworkBehaviour
 
         if (rank == 0 && coopButton != null)
         {
-            if (AllOthersAcross(targetX))
+            if (AllOthersAcrossStable(targetX))
             {
                 MoveToward(targetX);
                 return;
@@ -617,7 +617,7 @@ public class BotController : NetworkBehaviour
         }
 
         // 들었음: 나머지가 다 건넜으면 나도 건너 골로(단독이라 시소는 자동으로 수평).
-        if (AllOthersAcross(acrossX))
+        if (AllOthersAcrossStable(acrossX))
         {
             if (transform.position.x >= acrossX) MoveTowardGoal();
             else CrossSeesawSolo(seesawX);
@@ -825,6 +825,31 @@ public class BotController : NetworkBehaviour
             if (p.transform.position.x < acrossX) return false;
         }
         return true;
+    }
+
+    // AllOthersAcross()가 읽는 "다른 봇의 위치"는 그 봇 소유 클라이언트가 서버 권위
+    // 위치를 NetworkTransform으로 보간한 값이라, 실제로는 아직 못 건넜는데 보간
+    // 오버슈트로 딱 한 프레임만 acrossX를 넘어 보이는 경우가 있다(Stage5 쌍둥이
+    // 문지기의 TwinGatekeeperSwapMargin과 같은 부류의 문제). 이 한 프레임짜리 오판을
+    // 그대로 믿고 버튼/열쇠 운반자가 자리를 뜨면, 다음 프레임엔 다시 false로 돌아와
+    // 제자리로 복귀한다 -- 실측: 라이브 서버에서 CoopButton1이 몇 초 사이 십수 번
+    // 눌림/떨어짐(문도 그만큼 열림/닫힘)을 반복하며 봇이 버튼과 문 사이를 왔다갔다
+    // 튕기는 것으로 나타났다. "전원 건넘" 조건이 AcrossStableDelay 동안 끊김 없이
+    // 유지돼야만 실제로 자리를 뜬다 -- 조건이 중간에 한 번이라도 false가 되면 타이머가
+    // 리셋된다. UpdateGatekeeper의 rank0과 UpdateKeyCarrier는 같은 봇이 같은 프레임에
+    // 동시에 실행하지 않는 서로 다른 스테이지 분기라 타이머 필드 하나를 공유해도 안전하다.
+    private const float AcrossStableDelay = 0.3f;
+    private float allAcrossSince = -1f;
+
+    private bool AllOthersAcrossStable(float acrossX)
+    {
+        if (!AllOthersAcross(acrossX))
+        {
+            allAcrossSince = -1f;
+            return false;
+        }
+        if (allAcrossSince < 0f) allAcrossSince = Time.time;
+        return Time.time - allAcrossSince >= AcrossStableDelay;
     }
 
     // 스테이지 로직이 정한 목표 이동 입력(HorizontalInput)을 후처리해, 실제로 끼였을 때만

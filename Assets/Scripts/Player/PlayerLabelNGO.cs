@@ -38,11 +38,12 @@ public class PlayerLabelNGO : NetworkBehaviour
     {
         if (label == null || NetworkManager.Singleton == null) return;
 
-        int rank = 0;
-        foreach (ulong id in NetworkManager.Singleton.ConnectedClientsIds)
-        {
-            if (id < OwnerClientId) rank++;
-        }
+        // PlayerSetupNGO.GetRank()로 위임한다 -- 예전엔 여기서 직접 ConnectedClientsIds를
+        // OwnerClientId 기준으로 세었는데, 서버가 직접 스폰하는 채움 봇은 ConnectedClientsIds에
+        // 아예 없고(실제 접속이 아님) OwnerClientId도 전부 서버 자신으로 동일해 서로 구분이
+        // 안 됐다 -- 실측: 채움 봇이 섞인 로비에서 라벨이 전부 "P1"로 표시됨. BotController가
+        // 이미 겪고 고친 것과 같은 문제라 같은 해법(NetworkObjectId 기준)을 그대로 쓴다.
+        int rank = PlayerSetupNGO.GetRank(NetworkObject);
 
         string nicknameValue = nicknameComp != null ? nicknameComp.nickname.Value.ToString() : string.Empty;
         string text = string.IsNullOrEmpty(nicknameValue) ? $"P{rank + 1}" : nicknameValue;
