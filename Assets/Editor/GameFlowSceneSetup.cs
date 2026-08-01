@@ -303,13 +303,24 @@ public static class GameFlowSceneSetup
         WorldMapUI worldMap = overlayRoot.AddComponent<WorldMapUI>();
         worldMap.catalog = catalog;
 
-        // 맵 카드 -- 4개 스테이지 노드를 가로로 나열.
+        // 맵 카드 -- 스테이지 노드를 가로로 나열. 노드 개수는 카탈로그 전체 길이를
+        // 그대로 쓴다 -- 예전엔 4개로 하드코딩돼 있어서(nodeXs가 4칸짜리 고정 배열),
+        // Stage 5(Twin Gatekeeper) 추가 이후로도 이 맵에서는 영영 선택할 수 없는
+        // 상태였다(카탈로그엔 있지만 화면엔 안 뜸 -- 스테이지 순환 자동 진행으로는
+        // 여전히 도달 가능해서 게임 자체는 안 깨졌지만, "고른다"는 이 화면의 기능은
+        // 5번째 스테이지에 대해서만 조용히 빠져 있었다). 4개일 때의 기존 간격/카드
+        // 크기는 그대로 두고, 5개 이상일 때만 더 좁게/넓혀서 수용한다.
+        int nodeCount = catalog.stages != null ? catalog.stages.Length : 0;
+        float nodeSpacing = nodeCount > 4 ? 290f : 350f;
+        float nodeWidth = nodeCount > 4 ? 260f : 320f;
+        float mapCardWidth = Mathf.Max(1400f, nodeCount > 0 ? nodeSpacing * (nodeCount - 1) + nodeWidth + 200f : 1400f);
+
         GameObject mapCard = new GameObject("MapCard");
         mapCard.transform.SetParent(overlayRoot.transform, false);
         RectTransform mapCardRect = mapCard.AddComponent<RectTransform>();
         mapCardRect.anchorMin = new Vector2(0.5f, 0.5f);
         mapCardRect.anchorMax = new Vector2(0.5f, 0.5f);
-        mapCardRect.sizeDelta = new Vector2(1400f, 580f);
+        mapCardRect.sizeDelta = new Vector2(mapCardWidth, 580f);
         Image mapCardImage = mapCard.AddComponent<Image>();
         mapCardImage.sprite = NetworkSetupMenu.GetOrCreateRoundedRectSprite("Assets/Sprites/UI_CardPanel.png", UITheme.ColorBg, UITheme.ColorFg, 40f, 6f);
         mapCardImage.type = Image.Type.Sliced;
@@ -318,13 +329,12 @@ public static class GameFlowSceneSetup
         CreateLabel(mapCard.transform, "MapTitle", new Vector2(0.5f, 0.5f), new Vector2(0f, 230f), new Vector2(600f, 70f),
             44, UITheme.ColorPrimary, TextAnchor.MiddleCenter, headingFont, FontStyle.Bold).text = "스테이지 선택";
 
-        float[] nodeXs = { -525f, -175f, 175f, 525f };
-        int nodeCount = catalog.stages != null ? Mathf.Min(4, catalog.stages.Length) : 0;
         for (int i = 0; i < nodeCount; i++)
         {
             StageDefinition stage = catalog.stages[i];
-            Button nodeButton = CreateMenuButton(mapCard.transform, $"StageNode{i + 1}", new Vector2(nodeXs[i], 40f),
-                stage != null ? stage.titleEn : $"STAGE {i + 1}");
+            float nodeX = (i - (nodeCount - 1) / 2f) * nodeSpacing;
+            Button nodeButton = CreateMenuButton(mapCard.transform, $"StageNode{i + 1}", new Vector2(nodeX, 40f),
+                stage != null ? stage.titleEn : $"STAGE {i + 1}", nodeWidth);
             StageNodeButton nodeScript = nodeButton.gameObject.AddComponent<StageNodeButton>();
             nodeScript.worldMap = worldMap;
             nodeScript.stageIndex = i;
