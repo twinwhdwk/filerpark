@@ -119,7 +119,23 @@ public class PushableBlockNGO : NetworkBehaviour
         if (!satisfied && Time.time >= nextStuckLogTime)
         {
             nextStuckLogTime = Time.time + 3f;
-            Debug.Log($"[PushableBlock] {gameObject.name} 대기 중: overlap={overlapping.Count} required={requiredPushers} x={transform.position.x:F2}");
+            // 어느 플레이어가 트리거 안에 있고 없는지까지 남긴다 -- 카운트만으로는
+            // "인원이 모자란 건지, 누군가 대열에서 이탈해 안 돌아오는 건지" 구분이
+            // 안 돼서 실제 정체 원인(밀던 인원 하나가 진행 방향 너머로 밀려나 다시는
+            // 안 돌아온 것) 조사가 오래 걸렸다.
+            var overlappingIds = new List<string>();
+            foreach (var c in overlapping)
+            {
+                var no = c.GetComponentInParent<NetworkObject>();
+                overlappingIds.Add(no != null ? $"owner={no.OwnerClientId}" : "unknown");
+            }
+            var allPositions = new List<string>();
+            foreach (var p in PlayerSetupNGO.ActivePlayers)
+            {
+                var no = p.GetComponent<NetworkObject>();
+                allPositions.Add(no != null ? $"owner={no.OwnerClientId}/x={p.transform.position.x:F2}" : "unknown");
+            }
+            Debug.Log($"[PushableBlock] {gameObject.name} 대기 중: overlap={overlapping.Count} required={requiredPushers} x={transform.position.x:F2} pushing=[{string.Join(", ", overlappingIds)}] allPlayers=[{string.Join(", ", allPositions)}]");
         }
     }
 

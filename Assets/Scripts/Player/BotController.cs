@@ -502,7 +502,18 @@ public class BotController : NetworkBehaviour
             return;
         }
 
-        HorizontalInput = Mathf.Sign(block.targetPoint.position.x - block.transform.position.x);
+        // 블록이 아니라 "미는 자리"(block 뒤쪽 pushStandoffDistance 지점)를 목표로
+        // 걷는다 -- 예전엔 그냥 미는 방향으로 무조건 걸었는데(내 위치는 전혀 안 봄),
+        // 물리 충돌로 블록 앞쪽(진행 방향 너머)으로 밀려나가거나 낀 봇은 그 로직
+        // 그대로는 계속 같은 방향으로 더 멀어지기만 해서 다시는 못 돌아왔다(실측:
+        // 라이브 서버에서 필러봇 포함 4명 중 1명이 이렇게 이탈해 overlap이 2/3에서
+        // 4분 넘게 다시 안 채워짐 -- 위치는 x=22.96에 완전히 고정, 매 순간 required
+        // 인원을 못 채운 채였다). 미는 자리를 목표로 삼으면, 뒤에 있는 정상 케이스는
+        // 그대로 블록 쪽으로 걸어가 눌러 붙고(기존과 동일한 결과), 앞으로 넘어간
+        // 봇만 자동으로 반대 방향(되돌아오기)이 나온다.
+        float pushDir = Mathf.Sign(block.targetPoint.position.x - block.transform.position.x);
+        float standoffX = block.transform.position.x - pushDir * block.pushStandoffDistance;
+        HorizontalInput = Mathf.Sign(standoffX - transform.position.x);
     }
 
     // ------------------------------------------------------------------ Stage 3: 열쇠 릴레이
